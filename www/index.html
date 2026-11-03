@@ -574,6 +574,12 @@ button,input,select,textarea{font-family:inherit}
 .navfab svg{width:28px;height:28px}
 .navfab:active{transform:scale(.93)}
 
+/* drag handles: stop the WebView from scrolling/cancelling while a row is dragged */
+[data-drag]{touch-action:none;-webkit-user-select:none;user-select:none;cursor:grab}
+.dragging,.dragging *{-webkit-user-select:none;user-select:none}
+.dragging [data-ri]{will-change:transform}
+.drag-on{background:var(--pop)!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important;box-shadow:0 14px 30px -8px rgba(0,0,0,.35)!important;opacity:1!important}
+
 @media print{body::before,.top,.nav,.fab,.bottombar,#layer,.toast{display:none!important}body{background:#fff}.screen{padding:0}.rep-wrap{background:#fff;padding:0;gap:0}.page{box-shadow:none;border-radius:0;break-after:page;min-height:auto}}
 
 </style>
@@ -586,7 +592,7 @@ button,input,select,textarea{font-family:inherit}
 /* =================================================================
    Salli Money Manager — core: helpers, currencies, state, derived data
    ================================================================= */
-const APP_NAME='Salli', APP_VER='1.5.0';
+const APP_NAME='Salli', APP_VER='1.5.1';
 const KEY='salli.mm.v2';
 const NATIVE=!!(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform());
 const STANDALONE=!NATIVE&&(()=>{try{return window.self===window.top}catch(e){return false}})();
@@ -1081,16 +1087,35 @@ document.addEventListener('input',e=>{const el=e.target.closest('[data-in]');if(
 document.addEventListener('change',e=>{const el=e.target.closest('[data-ch]');if(!el)return;const f=A[el.dataset.ch];f&&f(el,el.dataset,e)});
 A.back=()=>back();A.tab=el=>tab(el.dataset.n);A.go=el=>go(el.dataset.n,el.dataset.p?JSON.parse(el.dataset.p):{});A.close=()=>closeSheet();
 
-/* ---------- drag reorder (pointer) ---------- */
+/* ---------- drag reorder (pointer + touch safe for Android WebView) ---------- */
 let DRG=null;
+function dragClear(d){[...d.list.children].forEach(c=>{c.style.transform='';c.style.transition='';c.style.zIndex='';c.style.position='';c.style.opacity='';c.style.pointerEvents='';c.classList.remove('drag-on')});d.list.classList.remove('dragging')}
+function dragMove(y){const d=DRG;if(!d)return;
+  // keep the list scrolled when the finger nears the top/bottom edge
+  const sc=d.scroller;if(sc){const r=sc.getBoundingClientRect();const edge=60;let v=0;if(y<r.top+edge)v=-(r.top+edge-y)/4;else if(y>r.bottom-edge)v=(y-(r.bottom-edge))/4;if(v){const b=sc.scrollTop;sc.scrollTop+=v;d.scrolled+=sc.scrollTop-b}}
+  const dy=y-d.startY+d.scrolled;d.item.style.transform=`translateY(${dy}px)`;
+  const n=d.list.children.length;const to=clamp(d.from+Math.round(dy/d.h),0,n-1);d.to=to;
+  // slide the other rows out of the way so nothing overlaps
+  [...d.list.children].forEach((c,i)=>{if(c===d.item)return;let sh=0;if(d.from<to&&i>d.from&&i<=to)sh=-d.h;else if(d.from>to&&i>=to&&i<d.from)sh=d.h;c.style.transform=sh?`translateY(${sh}px)`:''})}
+function dragEnd(commitMove){if(!DRG)return;const d=DRG;DRG=null;clearTimeout(LP);dragClear(d);const to=d.to??d.from;if(commitMove&&to!==d.from){const f=A['reorder_'+d.key];f&&f(d.from,to)}}
 document.addEventListener('pointerdown',e=>{
+  if(DRG)dragEnd(false);
   const h=e.target.closest('[data-drag]');if(!h)return;const item=h.closest('[data-ri]');const list=item&&item.parentElement;if(!list)return;
-  e.preventDefault();h.setPointerCapture&&h.setPointerCapture(e.pointerId);
-  DRG={list,item,key:h.dataset.drag,startY:e.clientY,from:+item.dataset.ri,h:item.getBoundingClientRect().height+10};
-  item.style.zIndex=5;item.style.position='relative';item.style.opacity='.85';
+  e.preventDefault();try{h.setPointerCapture&&h.setPointerCapture(e.pointerId)}catch(x){}
+  let sc=list.parentElement;while(sc&&sc!==document.body){const o=getComputedStyle(sc).overflowY;if((o==='auto'||o==='scroll')&&sc.scrollHeight>sc.clientHeight)break;sc=sc.parentElement}
+  const kids=[...list.children];const gap=kids.length>1?Math.abs(kids[1].getBoundingClientRect().top-kids[0].getBoundingClientRect().top):item.getBoundingClientRect().height+10;
+  DRG={list,item,key:h.dataset.drag,pid:e.pointerId,startY:e.clientY,from:+item.dataset.ri,to:+item.dataset.ri,h:gap||item.getBoundingClientRect().height+10,scroller:sc&&sc!==document.body?sc:null,scrolled:0};
+  list.classList.add('dragging');kids.forEach(c=>{if(c!==item)c.style.transition='transform .18s ease'});
+  item.style.zIndex=20;item.style.position='relative';item.classList.add('drag-on');
 });
-document.addEventListener('pointermove',e=>{if(!DRG)return;const dy=e.clientY-DRG.startY;DRG.item.style.transform=`translateY(${dy}px)`;DRG.to=clamp(DRG.from+Math.round(dy/DRG.h),0,DRG.list.children.length-1)});
-document.addEventListener('pointerup',()=>{if(!DRG)return;const d=DRG;DRG=null;d.item.style.transform='';const to=d.to??d.from;if(to!==d.from){const f=A['reorder_'+d.key];f&&f(d.from,to)}else{d.item.style.opacity='';d.item.style.position=''}});
+document.addEventListener('pointermove',e=>{if(!DRG||e.pointerId!==DRG.pid)return;e.preventDefault();dragMove(e.clientY)},{passive:false});
+// some Android WebViews still try to scroll the page under the finger — block it while dragging
+document.addEventListener('touchmove',e=>{if(DRG){e.preventDefault();if(e.touches[0])dragMove(e.touches[0].clientY)}},{passive:false});
+document.addEventListener('pointerup',e=>{if(DRG&&e.pointerId===DRG.pid)dragEnd(true)});
+document.addEventListener('touchend',()=>{if(DRG)dragEnd(true)});
+// WebView cancels the pointer when it decides to scroll; finish the move instead of leaving the row stuck
+document.addEventListener('pointercancel',e=>{if(DRG&&e.pointerId===DRG.pid)dragEnd(true)});
+document.addEventListener('touchcancel',()=>{if(DRG)dragEnd(true)});
 const moveIdx=(arr,f,t)=>{const [x]=arr.splice(f,1);arr.splice(t,0,x)};
 
 /* ---------- calculator keypad ---------- */

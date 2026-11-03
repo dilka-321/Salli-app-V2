@@ -1,6 +1,6 @@
 {
   "name": "salli-money-manager",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "private": true,
   "description": "Salli \u2014 personal money manager (Android build with Capacitor)",
   "scripts": {
