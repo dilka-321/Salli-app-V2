@@ -1,0 +1,6 @@
+{
+  "appId": "com.salli.moneymanager",
+  "appName": "Salli",
+  "webDir": "www",
+  "android": { "backgroundColor": "#12161B" }
+}
