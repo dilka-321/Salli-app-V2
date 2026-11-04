@@ -580,6 +580,12 @@ button,input,select,textarea{font-family:inherit}
 .dragging [data-ri]{will-change:transform}
 .drag-on{background:var(--pop)!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important;box-shadow:0 14px 30px -8px rgba(0,0,0,.35)!important;opacity:1!important}
 
+/* report export progress */
+.busy{position:fixed;inset:0;z-index:300;display:grid;place-items:center;background:rgba(0,0,0,.35);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px)}
+.busy-in{background:var(--pop);color:var(--fg);border-radius:18px;padding:18px 22px;display:flex;align-items:center;gap:12px;box-shadow:0 18px 40px -12px rgba(0,0,0,.45)}
+.busy .spin{width:22px;height:22px;border-radius:50%;border:3px solid color-mix(in srgb,var(--accent) 25%,transparent);border-top-color:var(--accent);animation:bspin .8s linear infinite}
+@keyframes bspin{to{transform:rotate(360deg)}}
+
 @media print{body::before,.top,.nav,.fab,.bottombar,#layer,.toast{display:none!important}body{background:#fff}.screen{padding:0}.rep-wrap{background:#fff;padding:0;gap:0}.page{box-shadow:none;border-radius:0;break-after:page;min-height:auto}}
 
 </style>
@@ -592,7 +598,7 @@ button,input,select,textarea{font-family:inherit}
 /* =================================================================
    Salli Money Manager — core: helpers, currencies, state, derived data
    ================================================================= */
-const APP_NAME='Salli', APP_VER='1.5.1';
+const APP_NAME='Salli', APP_VER='1.7.0';
 const KEY='salli.mm.v2';
 const NATIVE=!!(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform());
 const STANDALONE=!NATIVE&&(()=>{try{return window.self===window.top}catch(e){return false}})();
@@ -738,7 +744,7 @@ function baseState(){
     rates:[],smsDrafts:[],reports:[],splans:[],
     ot:{cfg:{basic:0,otRate:0,workDays:22,stdHours:8,autoOT:false,epf:8,etf:3,allowances:[{name:'',amount:0,epf:false},{name:'',amount:0,epf:false}],deductions:[{name:'',amount:0}]},log:{}},
     settings:{name:'',email:'',base:'LKR',theme:'system',lang:'en',pin:null,bio:null,accent:{id:'emerald',hex:'#1F9D63'},font:{family:'inter',scale:1},share:true,widgets:DEF_WIDGETS.slice(),hidden:[],smsDismissed:false,
-      notif:{bills:true,budget:true,subs:true,inst:true,daily:false},lastBackup:null,sample:false,onboarded:false,lastMonthSeen:null,myCurrencies:['USD','MVR','LKR','EUR'],planIntroHide:false,
+      notif:{bills:true,budget:true,subs:true,inst:true,daily:false},lastBackup:null,autoBk:{on:false,freq:'weekly',gmail:false,last:null,lastMail:null},sample:false,onboarded:false,lastMonthSeen:null,myCurrencies:['USD','MVR','LKR','EUR'],planIntroHide:false,
       exportCfg:{overview:true,charts:true,insights:true,txlist:true,income:true,behavior:true,top:true,budget:true,predict:false,bank:false,bankAccs:[]}},
     backupSnap:null
   };
@@ -2337,26 +2343,46 @@ A.reorder_dash=(f,t)=>{moveIdx(U.dash.order,f,t);render()};
 A.dwtoggle=el=>{const w=el.dataset.w;U.dash.hidden=el.checked?U.dash.hidden.filter(x=>x!==w):[...U.dash.hidden,w];render()};
 A.dashsave=()=>{S.settings.widgets=U.dash.order;S.settings.hidden=U.dash.hidden;U.dash=null;back();commit('Dashboard layout saved')};
 
-/* ---------------- Backup & restore ---------------- */
-SCR.backup=()=>({top:hdr(T('Backup & Restore'),{green:true,center:true}),html:`<div class="pad stack" style="align-items:center;text-align:center;padding-top:30px"><div style="width:130px;height:130px;border-radius:50%;background:var(--accent-soft);display:grid;place-items:center;box-shadow:0 0 0 12px color-mix(in srgb,var(--accent) 12%,transparent)"><span class="ic" style="width:90px;height:90px;border-radius:50%;background:var(--accent);color:var(--accent-ink)">${ic('cloud',1.6).replace('<svg','<svg style="width:44px;height:44px"')}</span></div>
-  <h2 style="font-size:calc(19px*var(--fs));margin:20px 0 0">Back up your data or restore your latest backup.</h2><p class="small muted">Last Backup: ${S.settings.lastBackup?new Date(S.settings.lastBackup).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}):'Never'}</p>
-  <button class="btn w" data-a="restore">${ic('history')} Restore Data</button><button class="btn out w" data-a="backupnow">${ic('cloud')} Backup Now</button>
-  <p class="tiny muted">Backups are saved on this device and as a backup code or file you can keep in Google Drive, email or notes.</p></div>`,fab:false});
+/* ---------------- Backup & restore (backup FILE: save to phone / share to an app / restore from file / auto backup) ---------------- */
+const BK_FREQ={daily:['Daily',1],weekly:['Weekly',7],monthly:['Monthly',30]};
+const fDT=iso=>iso?new Date(iso).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}):'Never';
+SCR.backup=()=>{const ab=S.settings.autoBk;const fr=(k)=>`<button class="chip ${ab.freq===k?'on':''}" data-a="abfreq" data-k="${k}">${BK_FREQ[k][0]}</button>`;
+  return {top:hdr(T('Backup & Restore'),{green:true,center:true}),html:`<div class="pad stack"><div class="stack" style="align-items:center;text-align:center;padding-top:14px"><div style="width:120px;height:120px;border-radius:50%;background:var(--accent-soft);display:grid;place-items:center;box-shadow:0 0 0 12px color-mix(in srgb,var(--accent) 12%,transparent)"><span class="ic" style="width:84px;height:84px;border-radius:50%;background:var(--accent);color:var(--accent-ink)">${ic('cloud',1.6).replace('<svg','<svg style="width:42px;height:42px"')}</span></div>
+  <h2 style="font-size:calc(19px*var(--fs));margin:18px 0 0">Back up your data to a file, or restore it from a backup file.</h2><p class="small muted" style="margin:0">Last Backup: ${fDT(S.settings.lastBackup)}</p></div>
+  <button class="btn w" data-a="backupnow">${ic('cloud')} Backup Now</button><button class="btn out w" data-a="restore">${ic('history')} Restore Data</button>
+  <h2 class="acc sethd" style="margin-top:8px">Automatic backup</h2>
+  <div class="card stack s8"><div class="between"><span><b class="small">Auto backup</b><div class="tiny muted">Saves a backup file to Download/${APP_NAME}/Backups when you open the app and one is due</div></span>${tgl('ab_on',ab.on,'abon')}</div>
+   ${ab.on?`<div class="row" style="gap:8px;flex-wrap:wrap">${fr('daily')}${fr('weekly')}${fr('monthly')}</div>
+   <div class="between"><span><b class="small">Also send to Gmail</b><div class="tiny muted">When a backup is due, ${APP_NAME} opens Gmail with the backup file attached — you just tap Send</div></span>${tgl('ab_mail',ab.gmail,'abmail')}</div>
+   <span class="tiny muted">Last auto backup: ${fDT(ab.last)}${ab.gmail?` · Last sent to Gmail: ${fDT(ab.lastMail)}`:''}</span>`:''}</div>
+  <p class="tiny muted" style="text-align:center">Keep your backup file somewhere safe (Gmail, Google Drive or your computer). To move to a new phone, install ${APP_NAME}, tap Restore Data and choose the file.</p></div>`,fab:false}};
 const backupJSON=()=>JSON.stringify({app:'salli',v:2,at:new Date().toISOString(),data:{...S,backupSnap:null}});
-A.backupnow=()=>{const j=backupJSON();try{localStorage.setItem(KEY+'.backup',j)}catch(e){}S.settings.lastBackup=new Date().toISOString();save();render();
-  openSheet(()=>`<h3>Backup created</h3><p class="small muted" style="margin:0">A copy is saved on this device. To keep it safe elsewhere${STANDALONE?', download the file or':''} copy the backup code and store it in Google Drive, email or notes.</p>
-   ${STANDALONE?`<button class="btn w" data-a="bkdl">${ic('upload').replace('<svg','<svg style="transform:rotate(180deg)"')} Download backup file</button>`:''}<button class="btn ${STANDALONE?'out':''} w" data-a="bkcopy">${ic('copy')} Copy backup code</button><span class="tiny muted">Size: ${(j.length/1024).toFixed(0)} KB</span>`,{})};
-A.bkdl=()=>{downloadFile(`salli-backup-${today()}.json`,backupJSON(),'application/json');toast('Backup file downloaded')};
-A.bkcopy=()=>copyText(backupJSON(),'Backup code copied');
-A.restore=()=>{let has=false;try{has=!!localStorage.getItem(KEY+'.backup')}catch(e){}
-  openSheet(()=>`<div style="text-align:center"><span class="ic lg green" style="margin:0 auto 10px;border-radius:50%;background:var(--accent);color:var(--accent-ink)">${ic('history')}</span><h3>Restore Data</h3><p class="small muted">Choose how to restore</p></div>
-   <button class="listbtn" style="border:1px solid var(--accent);background:var(--accent-soft)" data-a="rslast" ${has?'':'disabled'}><span class="ic green">${ic('cloud')}</span><span class="grow"><span class="badge green" style="float:right">Recommended</span><b>Get last backup from this device</b><small>${has?'Quickly restore everything from your latest backup.':'No backup saved on this device yet.'}</small></span>${ic('chevR')}</button>
-   <button class="listbtn" data-a="rsmanual"><span class="ic">${ic('link')}</span><span class="grow"><b>Manual restore</b><small>Use a backup file or backup code for more control.</small></span>${ic('chevR')}</button><button class="textbtn" style="color:var(--fg)" data-a="close">Cancel</button>`,{})};
-function doRestore(j){try{const o=JSON.parse(j);const d=o.data||o;if(!d.accounts||!d.txns||!d.settings)throw 0;dialog('Replace all data?','Restoring replaces everything currently in the app with the backup.',[{l:'Cancel'},{l:'Restore',red:true,a:()=>{const b=baseState();S=Object.assign(b,d);S.settings=Object.assign(b.settings,d.settings);closeSheet(true);NAV=[{n:'home',p:{}}];commit('Data restored successfully')}}])}catch(e){toast('That isn’t a valid backup. Copy the whole code and try again.',true)}}
-A.rslast=()=>{let j=null;try{j=localStorage.getItem(KEY+'.backup')}catch(e){}if(j)doRestore(j)};
-A.rsmanual=()=>{closeSheet();openSheet(()=>`<h3>Manual restore</h3><label class="btn out w" style="cursor:pointer">${ic('upload')} Choose backup file<input type="file" accept=".json,application/json,text/plain" hidden data-ch="rsfile"></label><div class="fld"><label for="rscode">Or paste a backup code</label><textarea id="rscode" style="min-height:140px"></textarea></div><button class="btn w" data-a="rscode">Restore</button>`,{})};
-A.rsfile=el=>{const f=el.files[0];if(!f)return;const r=new FileReader();r.onload=()=>doRestore(r.result);r.readAsText(f)};
-A.rscode=()=>doRestore(document.getElementById('rscode').value);
+const backupName=()=>{const d=new Date(),p=n=>String(n).padStart(2,'0');return `${APP_NAME}_Backup_${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}.json`};
+const BKOPT=extra=>Object.assign({mime:'application/json',label:'Backup',folder:'Backups'},extra||{});
+A.backupnow=()=>openSheet(()=>`<div style="text-align:center"><span class="ic lg green" style="margin:0 auto 10px;border-radius:50%;background:var(--accent);color:var(--accent-ink)">${ic('cloud')}</span><h3>Backup Now</h3><p class="small muted" style="margin:4px 0 0">A backup file with all your accounts, transactions, budgets and settings will be created.</p></div>
+   <button class="listbtn" data-a="bkgo" data-m="save"><span class="ic green">${ic('upload').replace('<svg','<svg style="transform:rotate(180deg)"')}</span><span class="grow"><b>Save to phone</b><small>Saved in Download/${APP_NAME}/Backups</small></span>${ic('chevR')}</button>
+   <button class="listbtn" data-a="bkgo" data-m="share"><span class="ic blue">${ic('share')}</span><span class="grow"><b>Share to an app</b><small>Gmail, Google Drive, WhatsApp and more</small></span>${ic('chevR')}</button>
+   <button class="textbtn" style="color:var(--fg)" data-a="close">Cancel</button>`,{});
+async function makeBackup(mode,opt){const j=backupJSON();const name=backupName();
+  await deliverFile(name,u8(j),'json',mode,BKOPT(opt));S.settings.lastBackup=new Date().toISOString();save();return name}
+A.bkgo=async el=>{const m=el.dataset.m;closeSheet();try{await makeBackup(m,{subject:`${APP_NAME} backup — ${fDslash(today())}`});render()}catch(e){toast('Could not create the backup: '+(e&&e.message||e),true)}};
+A.restore=()=>openSheet(()=>`<div style="text-align:center"><span class="ic lg green" style="margin:0 auto 10px;border-radius:50%;background:var(--accent);color:var(--accent-ink)">${ic('history')}</span><h3>Restore Data</h3><p class="small muted" style="margin:4px 0 0">Choose the ${APP_NAME} backup file you saved or downloaded (for example from Gmail, Google Drive or your Download folder).</p></div>
+   <label class="btn w" style="cursor:pointer">${ic('upload')} Choose backup file<input type="file" hidden data-ch="rsfile"></label>
+   <span class="tiny muted" style="text-align:center">Restoring replaces everything currently in the app with the backup.</span><button class="textbtn" style="color:var(--fg)" data-a="close">Cancel</button>`,{});
+function doRestore(j){try{const o=JSON.parse(j);const d=o.data||o;if(!d.accounts||!d.txns||!d.settings)throw 0;const when=o.at?` from ${fDT(o.at)}`:'';dialog('Replace all data?',`Restoring the backup${when} replaces everything currently in the app.`,[{l:'Cancel'},{l:'Restore',red:true,a:()=>{const b=baseState();S=Object.assign(b,d);S.settings=Object.assign(b.settings,d.settings);closeSheet(true);NAV=[{n:'home',p:{}}];commit('Data restored successfully')}}])}catch(e){toast('That file isn’t a '+APP_NAME+' backup. Choose the .json backup file.',true)}}
+A.rsfile=el=>{const f=el.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{el.value='';doRestore(r.result)};r.onerror=()=>toast('Could not read that file',true);r.readAsText(f)};
+/* auto backup */
+A.abon=el=>{S.settings.autoBk.on=el.checked;save();render();if(el.checked){toast('Auto backup on');setTimeout(()=>autoBackupCheck(true),300)}};
+A.abfreq=el=>{S.settings.autoBk.freq=el.dataset.k;save();render()};
+A.abmail=el=>{S.settings.autoBk.gmail=el.checked;save();render();if(el.checked)setTimeout(()=>autoBackupCheck(true),300)};
+const bkDue=(last,days)=>!last||(Date.now()-new Date(last).getTime())>=days*864e5-36e5;
+async function autoBackupCheck(now){const ab=S.settings.autoBk;if(!ab||!ab.on||!UNLOCKED)return;const days=BK_FREQ[ab.freq]?.[1]||7;
+  try{if(bkDue(ab.last,days)||now&&!ab.last){await deliverFile(backupName(),u8(backupJSON()),'json','auto',BKOPT());ab.last=S.settings.lastBackup=new Date().toISOString();save()}}catch(e){}
+  if(ab.gmail&&bkDue(ab.lastMail,days)&&!(ab.snooze&&Date.now()<ab.snooze)&&!SH.length&&!document.querySelector('.dlg,.dialog'))openSheet(()=>`<div style="text-align:center"><span class="ic lg green" style="margin:0 auto 10px;border-radius:50%;background:var(--accent);color:var(--accent-ink)">${ic('cloud')}</span><h3>Your ${BK_FREQ[ab.freq][0].toLowerCase()} backup is ready</h3><p class="small muted" style="margin:4px 0 0">Send it to your Gmail so it’s safe even if you lose your phone. In the share menu choose <b>Gmail</b>, enter your email and tap Send.</p></div>
+    <button class="btn w" data-a="abmailnow">${ic('share')} Send backup to Gmail</button><button class="textbtn" style="color:var(--fg)" data-a="abmaillater">Later</button>`,{})}
+A.abmailnow=async()=>{closeSheet();try{await makeBackup('share',{subject:`${APP_NAME} backup — ${fDslash(today())}`,text:`${APP_NAME} money manager backup created ${fDT(new Date().toISOString())}. To restore: open ${APP_NAME} › Backup & Restore › Restore Data and choose this file.`,dialog:'Send backup to Gmail',noToast:true});S.settings.autoBk.lastMail=new Date().toISOString();save();render()}catch(e){toast('Could not create the backup',true)}};
+A.abmaillater=()=>{S.settings.autoBk.snooze=Date.now()+864e5;save();closeSheet()}; // remind again tomorrow
+try{localStorage.removeItem(KEY+'.backup')}catch(e){} // old on-device backup copy is no longer used
 
 /* ---------------- Settings ---------------- */
 SCR.settings=()=>{const s=S.settings;const th=(v,l,i)=>`<button class="row" style="width:100%;padding:12px 4px" data-a="settheme" data-v="${v}"><span class="radio ${s.theme===v?'on':''}"></span><span class="grow" style="text-align:left">${l}</span><span class="acc">${ic(i)}</span></button>`;
@@ -2448,12 +2474,12 @@ function renderLock(){app.innerHTML='';layer.innerHTML=`<div class="lock"><span 
 A.pinkey=el=>{const k=el.dataset.v;if(k==='⌫')PINBUF=PINBUF.slice(0,-1);else if(PINBUF.length<4)PINBUF+=k;renderLock();if(PINBUF.length===4){if(pinHash(PINBUF)===S.settings.pin){unlockApp()}else{PINBUF='';renderLock();document.getElementById('pinerr').textContent='Wrong PIN. Try again.'}}};
 A.pinforgot=()=>{layer.innerHTML=`<div class="lock"><h2 style="margin:0">Forgot your PIN?</h2><p class="muted" style="text-align:center;max-width:300px;margin:0">The only way in without the PIN is to erase all data on this device. You can restore from a backup afterwards.</p><div class="btns" style="width:min(320px,100%)"><button class="btn out" data-a="pinback">Go back</button><button class="btn red" data-a="pinwipe">Erase &amp; reset</button></div></div>`};
 A.pinback=()=>{PINBUF='';renderLock()};
-A.pinwipe=()=>{const bk=(()=>{try{return localStorage.getItem(KEY+'.backup')}catch(e){return null}})();S=baseState();S.accounts.push({id:uid(),name:'Cash',currency:'LKR',type:'wallet',include:true,isDefault:true});UNLOCKED=true;layer.innerHTML='';commit('Data erased. Restore a backup from Backup & Restore.')};
+A.pinwipe=()=>{S=baseState();S.accounts.push({id:uid(),name:'Cash',currency:'LKR',type:'wallet',include:true,isDefault:true});UNLOCKED=true;layer.innerHTML='';commit('Data erased. Restore a backup from Backup & Restore.')};
 
 /* ---------------- Biometric unlock ----------------
    Android app: the phone's fingerprint / face unlock through the NativeBiometric plugin.
    Browser (served over https): the device's built-in authenticator through WebAuthn. */
-function unlockApp(){UNLOCKED=true;PINBUF='';layer.innerHTML='';render();newMonthCheck()}
+function unlockApp(){UNLOCKED=true;PINBUF='';layer.innerHTML='';render();newMonthCheck();setTimeout(()=>{try{autoBackupCheck()}catch(e){}},1600)}
 const BIO_NATIVE=()=>window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins.NativeBiometric;
 async function bioAvailable(){
   const N=BIO_NATIVE();if(N){try{const r=await N.isAvailable();return r&&r.isAvailable?'native':null}catch(e){return null}}
@@ -2669,9 +2695,6 @@ function reportText(){const {f,t,h}=U.repLast;const st=h.st;return `${APP_NAME} 
 function reportCSV(){const {f,t}=U.repLast;const rows=[['Date','Time','Type','Title','Category','Account','Currency','Amount',`Amount (${S.settings.base})`,'Note','Tags']];
   S.txns.filter(x=>inRange(x,f,t)).sort((a,b)=>a.date.localeCompare(b.date)).forEach(x=>rows.push([x.date,x.time||'',x.type,txTitle(x),x.catId?cat(x.catId)?.name||'':'',accName(x.accId),accCur(x.accId),x.amount,round2(tBase(x)),x.note||'',(x.tags||[]).join('; ')]));
   return rows.map(r=>r.map(c=>/[",\n]/.test(String(c))?'"'+String(c).replace(/"/g,'""')+'"':c).join(',')).join('\n')}
-A.repshare=el=>{const items=[{l:'Copy report summary',i:'copy',a:()=>copyText(reportText(),'Report summary copied')},{l:'Copy transactions (CSV)',i:'report',a:()=>copyText(reportCSV(),'CSV copied — paste into Excel or Sheets')}];
-  if(STANDALONE){items.unshift({l:'Save as PDF / Print',i:'note',a:()=>window.print()});items.push({l:'Download CSV file',i:'upload',a:()=>downloadFile(`Financial_Report_${U.repLast.f.replace(/-/g,'')}_${U.repLast.t.replace(/-/g,'')}.csv`,reportCSV(),'text/csv')})}
-  openMenu(el,items)};
 A.repsettings=()=>{const c=S.settings.exportCfg;const r=(k,t,s)=>`<div class="card between"><span><b class="small">${t}</b><div class="tiny muted">${s}</div></span>${tgl('ec_'+k,c[k],'ectoggle','data-k="'+k+'"')}</div>`;
   openSheet(()=>`<div class="sh"><h3>Export Settings</h3><button class="ib" data-a="close" aria-label="Close">${ic('x')}</button></div><div class="sec">Core</div>${r('overview','Financial Overview','Include financial summary, health score and key metrics')}${r('charts','Charts','Include visual charts showing income and expense distribution')}${r('insights','Insights','Include financial insights and behavioral analysis')}${r('txlist','Transaction List','Include detailed transaction list in the report')}${r('income','Include Income','Include income transactions in calculations')}${r('behavior','Spending Behavior','Day-of-week patterns and transaction size distribution')}${r('top','Top Transactions','Largest individual expenses and income in the period')}${r('budget','Budget Performance','Visual progress bars showing utilization per budget')}${r('predict','Expense Prediction','Next month forecast (3-month avg)')}
   ${r('bank','Bank Statements','Statement for each selected account: opening balance, every transaction, running balance')}
@@ -2680,6 +2703,170 @@ A.repsettings=()=>{const c=S.settings.exportCfg;const r=(k,t,s)=>`<div class="ca
 A.ectoggle=el=>{const c=S.settings.exportCfg;c[el.dataset.k]=el.checked;if(el.dataset.k==='bank'){if(el.checked&&!(c.bankAccs||[]).length)c.bankAccs=wallets().map(a=>a.id);rs()}};
 A.ecbank=el=>{const c=S.settings.exportCfg;const id=el.dataset.id;c.bankAccs=(c.bankAccs||[]).includes(id)?c.bankAccs.filter(x=>x!==id):[...(c.bankAccs||[]),id];rs()};
 A.ecbankall=()=>{const c=S.settings.exportCfg;c.bankAccs=(c.bankAccs||[]).length===S.accounts.length?[]:S.accounts.map(a=>a.id);rs()};A.ecapply=()=>{const c=S.settings.exportCfg;if(c.bank&&!(c.bankAccs||[]).length){toast('Select at least one account for bank statements',true);return}closeSheet();commit('Export settings applied')};
+
+/* =========================================================
+   Report export: real PDF + Excel (.xlsx) files, built on the phone
+   (no internet / libraries needed) and shared or saved to storage.
+   ========================================================= */
+
+/* ---------- small binary helpers ---------- */
+const XE=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g,'');
+const u8=s=>new TextEncoder().encode(s);
+function u8cat(parts){const n=parts.reduce((a,p)=>a+p.length,0);const o=new Uint8Array(n);let i=0;for(const p of parts){o.set(p,i);i+=p.length}return o}
+const CRCT=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0}return t})();
+function crc32(b){let c=0xFFFFFFFF;for(let i=0;i<b.length;i++)c=CRCT[(c^b[i])&255]^(c>>>8);return (c^0xFFFFFFFF)>>>0}
+/* store-only ZIP (what an .xlsx is) */
+function zipStore(files){const loc=[],cen=[];let off=0;const d=new Date();
+  const dt=((d.getFullYear()-1980)<<9)|((d.getMonth()+1)<<5)|d.getDate(),tm=(d.getHours()<<11)|(d.getMinutes()<<5)|(d.getSeconds()>>1);
+  for(const [name,data] of files){const nb=u8(name),crc=crc32(data),sz=data.length;
+    const h=new DataView(new ArrayBuffer(30));h.setUint32(0,0x04034b50,true);h.setUint16(4,20,true);h.setUint16(6,0x0800,true);h.setUint16(8,0,true);h.setUint16(10,tm,true);h.setUint16(12,dt,true);h.setUint32(14,crc,true);h.setUint32(18,sz,true);h.setUint32(22,sz,true);h.setUint16(26,nb.length,true);h.setUint16(28,0,true);
+    const lh=u8cat([new Uint8Array(h.buffer),nb]);loc.push(lh,data);
+    const c=new DataView(new ArrayBuffer(46));c.setUint32(0,0x02014b50,true);c.setUint16(4,20,true);c.setUint16(6,20,true);c.setUint16(8,0x0800,true);c.setUint16(10,0,true);c.setUint16(12,tm,true);c.setUint16(14,dt,true);c.setUint32(16,crc,true);c.setUint32(20,sz,true);c.setUint32(24,sz,true);c.setUint16(28,nb.length,true);c.setUint32(42,off,true);
+    cen.push(u8cat([new Uint8Array(c.buffer),nb]));off+=lh.length+sz}
+  const cd=u8cat(cen);const e=new DataView(new ArrayBuffer(22));e.setUint32(0,0x06054b50,true);e.setUint16(8,files.length,true);e.setUint16(10,files.length,true);e.setUint32(12,cd.length,true);e.setUint32(16,off,true);
+  return u8cat([...loc,cd,new Uint8Array(e.buffer)])}
+
+/* ---------- Excel (.xlsx) writer ----------
+   sheet = {name, cols:[widths], rows:[[cell...]]}; cell = value | {v, s}
+   styles: 0 normal, 1 bold header (green fill, white), 2 money, 3 bold, 4 title, 5 bold money, 6 date-ish text muted, 7 percent */
+function colName(i){let s='';i++;while(i){const m=(i-1)%26;s=String.fromCharCode(65+m)+s;i=(i-m-1)/26}return s}
+function buildXlsx(sheets,title){
+  const sheetXml=sh=>{const rows=sh.rows.map((r,ri)=>`<row r="${ri+1}">${r.map((c,ci)=>{if(c==null||c==='')return '';const o=(typeof c==='object')?c:{v:c};const ref=colName(ci)+(ri+1);const s=o.s?` s="${o.s}"`:'';
+      if(typeof o.v==='number'&&isFinite(o.v))return `<c r="${ref}"${s}><v>${o.v}</v></c>`;
+      return `<c r="${ref}" t="inlineStr"${s}><is><t xml:space="preserve">${XE(o.v)}</t></is></c>`}).join('')}</row>`).join('');
+    const cols=sh.cols?`<cols>${sh.cols.map((w,i)=>`<col min="${i+1}" max="${i+1}" width="${w}" customWidth="1"/>`).join('')}</cols>`:'';
+    const frz=sh.freeze?`<sheetViews><sheetView workbookViewId="0"><pane ySplit="${sh.freeze}" topLeftCell="A${sh.freeze+1}" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>`:'';
+    const mg=sh.merge&&sh.merge.length?`<mergeCells count="${sh.merge.length}">${sh.merge.map(m=>`<mergeCell ref="${m}"/>`).join('')}</mergeCells>`:'';
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">${frz}${cols}<sheetData>${rows}</sheetData>${mg}</worksheet>`};
+  const used=new Set();const nm=n=>{let b=String(n).replace(/[\\\/\?\*\[\]:]/g,' ').slice(0,31).trim()||'Sheet';let x=b,i=2;while(used.has(x.toLowerCase()))x=b.slice(0,28)+' '+(i++);used.add(x.toLowerCase());return x};
+  const names=sheets.map(s=>nm(s.name));
+  const styles=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<numFmts count="2"><numFmt numFmtId="164" formatCode="#,##0.00;[Red]-#,##0.00"/><numFmt numFmtId="165" formatCode="0.0%"/></numFmts>
+<fonts count="5"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="16"/><color rgb="FF0E2A1F"/><name val="Calibri"/></font><font><sz val="10"/><color rgb="FF6A747D"/><name val="Calibri"/></font></fonts>
+<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF0E2A1F"/><bgColor indexed="64"/></patternFill></fill></fills>
+<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
+<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+<cellXfs count="8"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="0" fontId="3" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="164" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1" applyNumberFormat="1"/><xf numFmtId="0" fontId="4" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="165" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs>
+<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
+  const files=[
+    ['[Content_Types].xml',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>${sheets.map((s,i)=>`<Override PartName="/xl/worksheets/sheet${i+1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('')}</Types>`],
+    ['_rels/.rels',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/></Relationships>`],
+    ['docProps/core.xml',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>${XE(title)}</dc:title><dc:creator>${XE(APP_NAME)}</dc:creator><dcterms:created xsi:type="dcterms:W3CDTF">${new Date().toISOString().slice(0,19)}Z</dcterms:created></cp:coreProperties>`],
+    ['xl/workbook.xml',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${names.map((n,i)=>`<sheet name="${XE(n)}" sheetId="${i+1}" r:id="rId${i+1}"/>`).join('')}</sheets></workbook>`],
+    ['xl/_rels/workbook.xml.rels',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${sheets.map((s,i)=>`<Relationship Id="rId${i+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i+1}.xml"/>`).join('')}<Relationship Id="rId${sheets.length+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`],
+    ['xl/styles.xml',styles],
+    ...sheets.map((s,i)=>[`xl/worksheets/sheet${i+1}.xml`,sheetXml(s)])
+  ].map(([n,x])=>[n,u8(x)]);
+  return zipStore(files)}
+
+/* the report's data as workbook sheets (same period + export settings as the preview) */
+function reportSheets(){const {f,t,h}=U.repLast;const st=h.st;const cfg=S.settings.exportCfg;const base=S.settings.base;const H=v=>({v,s:1}),M=v=>({v:round2(+v||0),s:2}),BM=v=>({v:round2(+v||0),s:5}),Bd=v=>({v,s:3});
+  const sheets=[];const nw=netWorth();
+  const sum1=[[{v:APP_NAME+' — Financial Summary Report',s:4}],[{v:`Period: ${fDslash(f)} – ${fDslash(t)}   ·   Prepared for: ${S.settings.name||'—'}   ·   Generated ${fDslash(today())}`,s:6}],[],
+    [H('Metric'),H(`Amount (${base})`)],
+    ['Total income',M(st.inc)],['Total expenses',M(st.exp)],[Bd('Net (income − expenses)'),BM(st.inc-st.exp)],['Savings rate',{v:isFinite(h.sr)?h.sr:0,s:7}],
+    ['Cash in',M(st.cin)],['Cash out',M(st.cout)],[],
+    ['Financial health score',`${h.score} / 100 — Grade ${h.g[0]} • ${h.g[1]}`],['Net worth',M(nw.net)]];
+  sum1.push(['Total assets',M(nw.A)],['Total liabilities',M(nw.L)]);
+  sheets.push({name:'Summary',cols:[34,26],rows:sum1,merge:['A1:F1','A2:F2']});
+  // categories
+  const byCat=(kind)=>Object.entries(st.list.filter(x=>kind==='exp'?isExp(x):x.type==='income').reduce((m,x)=>(m[x.catId]=(m[x.catId]||0)+tBase(x),m),{})).sort((a,b)=>b[1]-a[1]);
+  const ex=byCat('exp'),inc=byCat('inc');const tx=ex.reduce((a,b)=>a+b[1],0)||1,ti=inc.reduce((a,b)=>a+b[1],0)||1;
+  const crow=[[H('Expense category'),H(`Amount (${base})`),H('Share')],...ex.map(([id,v])=>[cat(id)?.name||'Other',M(v),{v:v/tx,s:7}]),[Bd('Total'),BM(ex.reduce((a,b)=>a+b[1],0)),''],[],
+    [H('Income category'),H(`Amount (${base})`),H('Share')],...inc.map(([id,v])=>[cat(id)?.name||'Other',M(v),{v:v/ti,s:7}]),[Bd('Total'),BM(inc.reduce((a,b)=>a+b[1],0)),'']];
+  sheets.push({name:'Categories',cols:[30,20,10],rows:crow});
+  if(cfg.txlist!==false){const L=S.txns.filter(x=>inRange(x,f,t)).sort((a,b)=>(a.date+(a.time||'')).localeCompare(b.date+(b.time||'')));
+    sheets.push({name:'Transactions',freeze:1,cols:[12,8,10,26,20,20,9,15,16,26,16],rows:[['Date','Time','Type','Title','Category','Account','Currency','Amount',`Amount (${base})`,'Note','Tags'].map(H),
+      ...L.map(x=>[fDslash(x.date),x.time||'',x.type,txTitle(x),x.catId?cat(x.catId)?.name||'':'',accName(x.accId),accCur(x.accId),M(x.type==='income'?+x.amount:-x.amount),M(x.type==='income'?tBase(x):-tBase(x)),x.note||'',(x.tags||[]).join('; ')])]})}
+  if(cfg.bank){(cfg.bankAccs||[]).map(acc).filter(Boolean).forEach(a=>{
+    const open=sum(S.txns.filter(x=>x.accId===a.id&&x.date<f),x=>x.type==='income'?+x.amount:-x.amount);
+    const L=S.txns.filter(x=>x.accId===a.id&&inRange(x,f,t)).sort((x,y)=>(x.date+(x.time||'')).localeCompare(y.date+(y.time||'')));
+    let bal=open;const rows=L.map(x=>{const cr=x.type==='income';bal+=cr?+x.amount:-x.amount;return [fDslash(x.date),x.note||txTitle(x),txTitle(x),cr?'':M(x.amount),cr?M(x.amount):'',M(bal)]});
+    const dr=sum(L.filter(x=>x.type!=='income'),x=>x.amount),crs=sum(L.filter(x=>x.type==='income'),x=>x.amount);
+    sheets.push({name:'Statement - '+a.name,cols:[12,30,20,16,16,18],rows:[[{v:'Bank Statement — '+a.name,s:4}],[{v:`${a.type==='credit'?'Credit card':'Account'} · ${a.currency} · ${fDslash(f)} – ${fDslash(t)} · Holder: ${S.settings.name||'—'}`,s:6}],[],
+      [H('Date'),H('Description'),H('Category'),H(`Debit (${a.currency})`),H(`Credit (${a.currency})`),H(`Balance (${a.currency})`)],
+      [fDslash(f),Bd('Opening balance'),'','','',BM(open)],...rows,[ '',Bd('Closing balance'),'',BM(dr),BM(crs),BM(open-dr+crs)]],merge:['A1:F1','A2:F2'],freeze:4})})}
+  return sheets}
+
+/* ---------- PDF writer (JPEG page images) ---------- */
+function buildPdf(pages,title){ // pages: [{jpg:Uint8Array,w,h (px), pw,ph (pt)}]
+  const parts=[],offs=[];let len=0;const add=b=>{parts.push(b);len+=b.length};const obj=(n,body)=>{offs[n]=len;add(u8(`${n} 0 obj\n`));for(const b of [].concat(body))add(typeof b==='string'?u8(b):b);add(u8('\nendobj\n'))};
+  add(u8('%PDF-1.4\n'));add(new Uint8Array([37,226,227,207,211,10]));
+  const N=pages.length;const kids=pages.map((p,i)=>`${3+i*3} 0 R`).join(' ');
+  obj(1,'<< /Type /Catalog /Pages 2 0 R >>');obj(2,`<< /Type /Pages /Count ${N} /Kids [${kids}] >>`);
+  pages.forEach((p,i)=>{const po=3+i*3,co=po+1,io=po+2;const cs=`q ${p.pw} 0 0 ${p.ph} 0 0 cm /Im0 Do Q`;
+    obj(po,`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${p.pw} ${p.ph}] /Resources << /XObject << /Im0 ${io} 0 R >> >> /Contents ${co} 0 R >>`);
+    obj(co,[`<< /Length ${cs.length} >>\nstream\n`,cs,'\nendstream']);
+    obj(io,[`<< /Type /XObject /Subtype /Image /Width ${p.w} /Height ${p.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${p.jpg.length} >>\nstream\n`,p.jpg,'\nendstream'])});
+  const info=3+N*3;const esc=s=>String(s).replace(/[\\()]/g,m=>'\\'+m).replace(/[^\x20-\x7E]/g,'-');
+  obj(info,`<< /Title (${esc(title)}) /Creator (${esc(APP_NAME)}) /Producer (${esc(APP_NAME)}) >>`);
+  const xo=len;let x=`xref\n0 ${info+1}\n0000000000 65535 f \n`;for(let i=1;i<=info;i++)x+=String(offs[i]).padStart(10,'0')+' 00000 n \n';
+  add(u8(x+`trailer\n<< /Size ${info+1} /Root 1 0 R /Info ${info} 0 R >>\nstartxref\n${xo}\n%%EOF\n`));return u8cat(parts)}
+
+/* render each report page (the same pages you see in Export Preview) into A4 PDF pages */
+async function reportPdf(){
+  const src=document.getElementById('report');if(!src)throw new Error('Open the report preview first');
+  const W=595,PH=842,SC=2.4; // A4 in points; layout width = 595 CSS px, rendered at 2.4x for sharp text
+  const css=[...document.querySelectorAll('style')].map(s=>s.textContent).join('\n');
+  const rootVars=(()=>{const cs=getComputedStyle(document.documentElement);const v=[];for(let i=0;i<cs.length;i++){const p=cs[i];if(p.startsWith('--'))v.push(`${p}:${cs.getPropertyValue(p)}`)}return v.join(';')})();
+  const host=document.createElement('div');host.style.cssText=`position:fixed;left:-10000px;top:0;width:${W}px;pointer-events:none;opacity:0`;document.body.appendChild(host);
+  const out=[];
+  try{for(const pg of [...src.querySelectorAll(':scope > .page')]){
+      const cl=pg.cloneNode(true);cl.style.cssText+=`;width:${W}px;min-height:${PH}px;box-shadow:none;border-radius:0;overflow:visible;margin:0`;
+      host.innerHTML='';const wrap=document.createElement('div');wrap.className='rep-wrap';wrap.style.cssText=`padding:0;background:#fff;width:${W}px`;wrap.appendChild(cl);host.appendChild(wrap);
+      const H=Math.ceil(cl.getBoundingClientRect().height);const top0=cl.getBoundingClientRect().top;
+      // safe places to break a long page: under table rows / blocks
+      const brk=[...cl.querySelectorAll('tr, .pb > *, .ph, .pf')].map(e=>Math.round(e.getBoundingClientRect().bottom-top0)).filter(y=>y>0&&y<H).sort((a,b)=>a-b);
+      const img=await pageImage(cl,css,rootVars,W,H);
+      let y=0;while(y<H-2){let end=Math.min(H,y+PH);if(end<H){const c=brk.filter(b=>b>y+PH*0.5&&b<=y+PH);if(c.length)end=c[c.length-1]}
+        const h=end-y;const cv=document.createElement('canvas');cv.width=Math.round(W*SC);cv.height=Math.round(PH*SC);const g=cv.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,cv.width,cv.height);
+        g.drawImage(img,0,Math.round(y*SC),cv.width,Math.round(h*SC),0,0,cv.width,Math.round(h*SC));
+        const jpg=await new Promise((res,rej)=>{try{const d=cv.toDataURL('image/jpeg',0.9);res(b64ToU8(d.split(',')[1]))}catch(e){rej(e)}});
+        out.push({jpg,w:cv.width,h:cv.height,pw:W,ph:PH});y=end}}
+  }finally{host.remove()}
+  if(!out.length)throw new Error('Nothing to export');
+  return buildPdf(out,`${APP_NAME} Financial Report ${U.repLast.f} – ${U.repLast.t}`)}
+function pageImage(node,css,rootVars,W,H){const SC=2.4;
+  const box=document.createElement('div');box.setAttribute('xmlns','http://www.w3.org/1999/xhtml');box.style.cssText=`${rootVars};width:${W}px;height:${H}px;background:#fff;font-family:var(--f),Roboto,Arial,sans-serif`;
+  const st=document.createElement('style');st.textContent=css.replace(/@import[^;]+;/g,'').replace(/@font-face\s*\{[^}]*\}/g,'');box.appendChild(st);
+  const wrap=document.createElement('div');wrap.className='rep-wrap';wrap.style.cssText='padding:0;background:#fff;gap:0';wrap.appendChild(node.cloneNode(true));box.appendChild(wrap);
+  const xhtml=new XMLSerializer().serializeToString(box);
+  const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${W*SC}" height="${H*SC}" viewBox="0 0 ${W} ${H}"><foreignObject x="0" y="0" width="${W}" height="${H}">${xhtml}</foreignObject></svg>`;
+  return new Promise((res,rej)=>{const im=new Image();im.onload=()=>{const cv=document.createElement('canvas');cv.width=Math.round(W*SC);cv.height=Math.round(H*SC);const g=cv.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,cv.width,cv.height);g.drawImage(im,0,0,cv.width,cv.height);res(cv)};im.onerror=()=>rej(new Error('Could not draw the report page'));im.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg)})}
+function b64ToU8(b){const s=atob(b);const o=new Uint8Array(s.length);for(let i=0;i<s.length;i++)o[i]=s.charCodeAt(i);return o}
+function u8ToB64(u){let s='';const C=0x8000;for(let i=0;i<u.length;i+=C)s+=String.fromCharCode.apply(null,u.subarray(i,i+C));return btoa(s)}
+
+/* ---------- share / save the file ---------- */
+const MIME={pdf:'application/pdf',xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'};
+const repFileName=ext=>`Financial_Report_${U.repLast.f.replace(/-/g,'')}_${U.repLast.t.replace(/-/g,'')}.${ext}`;
+function busy(on,msg){let o=document.querySelector('.busy');if(!on){o&&o.remove();return}if(!o){o=document.createElement('div');o.className='busy';document.body.appendChild(o)}o.innerHTML=`<div class="busy-in"><span class="spin"></span><b>${esc(msg)}</b></div>`}
+async function makeReportFile(kind){if(kind==='pdf')return reportPdf();return buildXlsx(reportSheets(),`${APP_NAME} Financial Report`)}
+async function deliverFile(name,bytes,kind,mode,o){o=o||{};
+  // mode: 'share' (share sheet) | 'save' (phone storage, toast) | 'auto' (phone storage, silent, never opens anything)
+  const P=window.Capacitor&&window.Capacitor.Plugins||{};const FS=P.Filesystem,SH=P.Share;const label=o.label||(kind==='pdf'?'PDF':'Excel');const mime=o.mime||MIME[kind];const sub=o.folder?'/'+o.folder:'';
+  if(NATIVE&&FS){const data=u8ToB64(bytes);
+    if(mode==='share'){const r=await FS.writeFile({path:name,data,directory:'CACHE'});
+      if(SH){try{await SH.share({title:o.subject||name,text:o.text,files:[r.uri],dialogTitle:o.dialog||('Share '+label+(o.label?'':' report'))});if(!o.noToast)toast(label+' shared successfully!')}catch(e){if(!/cancel/i.test(String(e&&e.message)))throw e}return}}
+    // save into the phone's Download (or Documents) folder
+    try{await FS.requestPermissions()}catch(e){}
+    const tries=[{directory:'EXTERNAL_STORAGE',path:'Download/'+APP_NAME+sub+'/'+name,where:'Download/'+APP_NAME+sub},{directory:'DOCUMENTS',path:APP_NAME+sub+'/'+name,where:'Documents/'+APP_NAME+sub}];
+    for(const tr of tries){try{await FS.writeFile({path:tr.path,data,directory:tr.directory,recursive:true});if(mode!=='auto')toast(`${label} saved to ${tr.where}`);return tr.where}catch(e){}}
+    if(mode==='auto')throw new Error('Could not save to phone storage');
+    // last resort: open the share sheet so it can be saved to Files / Drive
+    const r=await FS.writeFile({path:name,data,directory:'CACHE'});if(SH){await SH.share({title:name,files:[r.uri],dialogTitle:'Save '+label+(o.label?'':' report')})}return}
+  if(mode==='auto')return; // browsers can't save files silently
+  const file=new Blob([bytes],{type:mime});
+  if(mode==='share'){try{const fo=new File([file],name,{type:mime});if(navigator.canShare&&navigator.canShare({files:[fo]})){await navigator.share({files:[fo],title:o.subject||name,text:o.text});if(!o.noToast)toast(label+' shared successfully!');return}}catch(e){if(e&&e.name==='AbortError')return}}
+  if(downloadFile(name,file,mime))toast(`${label} file downloaded`);else toast('Your browser blocked the download',true)}
+async function exportReport(kind,mode){if(!U.repLast){toast('Open a report first',true);return}
+  busy(true,kind==='pdf'?'Creating PDF…':'Creating Excel file…');await new Promise(r=>setTimeout(r,60));
+  try{const bytes=await makeReportFile(kind);busy(false);await deliverFile(repFileName(kind==='pdf'?'pdf':'xlsx'),bytes,kind,mode)}
+  catch(e){busy(false);console.error(e);toast('Could not create the file: '+(e&&e.message||e),true)}}
+A.repshare=()=>{const opt=(k,icon,t,s)=>`<div class="card stack s8"><div class="row"><span class="ic ${k==='pdf'?'red':'green'}">${icon}</span><span class="grow"><b>${t}</b><div class="tiny muted">${s}</div></span></div><div class="row" style="gap:8px"><button class="btn ghost grow" data-a="repexp" data-k="${k}" data-m="save">${ic('upload')} Save to phone</button><button class="btn grow" data-a="repexp" data-k="${k}" data-m="share">${ic('share')} Share</button></div></div>`;
+  openSheet(()=>`<div class="sh"><h3>Share Report</h3><button class="ib" data-a="close" aria-label="Close">${ic('x')}</button></div><span class="small muted">${fDslash(U.repLast.f)} – ${fDslash(U.repLast.t)} · choose the file type</span>
+    ${opt('pdf','<b style="font-size:11px">PDF</b>','PDF Report','All report pages exactly as in the preview')}
+    ${opt('xlsx','<b style="font-size:11px">XLS</b>','Excel Report (.xlsx)','Summary, categories, transactions'+(S.settings.exportCfg.bank?' and bank statements':'')+' in separate sheets')}`,{},{})};
+A.repexp=el=>{const k=el.dataset.k,m=el.dataset.m;closeSheet();exportReport(k,m)};
 
 /* =================================================================
    Spending Plans: a budget for a date range with planned expenses,
@@ -2785,7 +2972,7 @@ const posted=runFDInterest();
 window.addEventListener('popstate',()=>{});
 render();
 if(posted&&UNLOCKED)toast(posted+' FD interest payment'+(posted>1?'s':'')+' added');
-if(UNLOCKED)newMonthCheck();
+if(UNLOCKED){newMonthCheck();setTimeout(()=>{try{autoBackupCheck()}catch(e){}},1600)} // + automatic backup when one is due
 else if(S.settings.bio&&S.settings.bio.mode==='native')setTimeout(()=>A.biounlock(),300); // prompt for fingerprint straight away in the Android app
 refreshLiveRates().then(r=>{if(r==='updated'&&UNLOCKED)render()});
 

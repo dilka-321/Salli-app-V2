@@ -30,6 +30,8 @@ Build a signed release bundle in Android Studio (Build → Generate Signed Bundl
 - Biometric unlock: Settings → turn on App Lock (PIN), then Biometric Unlock. The phone asks for your fingerprint or face when the app opens; the PIN always works as a backup.
 - Exchange rates update automatically once a day when the phone is online (source: open.er-api.com). Manual rates in Settings → Exchange Rates always take priority.
 - The share buttons open Android's share sheet (WhatsApp, Gmail, etc.).
+- Reports: the Share button on Export Preview creates a real PDF or Excel (.xlsx) file. "Share" opens the share sheet with the file; "Save to phone" saves it to Download/Salli (or Documents/Salli).
+- Backup & Restore: "Backup Now" saves a backup file to Download/Salli/Backups or shares it (Gmail, Drive, WhatsApp). "Restore Data" opens the file picker; choose the backup .json file. Optional auto backup (daily/weekly/monthly) with a one-tap "Send to Gmail" reminder.
 - All data is stored on the phone. Use **Backup & Restore** in the app to keep a copy.
 - The Android back button navigates back inside the app and asks before exiting.
 - Automatic SMS reading needs an extra native SMS plugin and the READ_SMS permission (Google Play restricts this permission); the built-in SMS Parser works by pasting messages.
