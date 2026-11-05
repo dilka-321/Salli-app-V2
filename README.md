@@ -53,3 +53,10 @@ cd android && ./gradlew assembleDebug
 - Supabase free-tier quotas and inactivity/pause policies apply; “free” is not a guarantee of unlimited or permanent hosting.
 - Offline changes stay on that device until synchronization succeeds. Use **Backup & Restore** for independent backups.
 - The cloud row stores the app's complete state as one JSON document per user. Avoid editing the same account on multiple devices simultaneously; if a conflict occurs, Salli asks which full copy to retain.
+
+
+## Version 1.8.2 stability fixes
+- Isolates side-menu scrolling from the dashboard.
+- Android hardware Back from Admin approvals returns to the open side menu; subsequent Back closes the menu, then navigates the existing page stack before offering Exit at the home screen.
+- Shows a secure session-loading screen at startup to prevent a sign-in flash before restoring an existing session.
+- Rechecks online exchange rates when the cached fetch is older than six hours and when the app returns online/foreground. The provider itself publishes rates on its own update schedule; manual rates still take priority.

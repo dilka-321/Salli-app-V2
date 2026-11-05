@@ -254,7 +254,7 @@ input,select,textarea{min-width:0}
 .toast.err{background:var(--red);color:#fff}
 /* drawer */
 .drawer-scrim{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:50}
-.drawer{position:fixed;top:0;bottom:0;left:0;width:min(82vw,330px);background:var(--bg);z-index:51;overflow:auto;padding-bottom:calc(20px + env(safe-area-inset-bottom,0px));animation:slide .2s ease-out;border-radius:0 20px 20px 0}
+.drawer{position:fixed;top:0;bottom:0;left:0;width:min(82vw,330px);background:var(--bg);z-index:51;overflow:auto;padding-bottom:calc(20px + env(safe-area-inset-bottom,0px));animation:slide .2s ease-out;border-radius:0 20px 20px 0;overscroll-behavior:contain;touch-action:pan-y;-webkit-overflow-scrolling:touch}.drawer-scrim{touch-action:none}html.drawer-open,body.drawer-open{overflow:hidden!important;overscroll-behavior:none}
 @keyframes slide{from{transform:translateX(-30px);opacity:.5}}
 .dhead{background:linear-gradient(160deg,var(--hdr-green),var(--hdr-green2));color:#fff;padding:calc(20px + env(safe-area-inset-top,0px)) 18px 18px max(18px,env(safe-area-inset-left,0px));position:relative;border-radius:0 20px 0 0}
 .dhead .brand{position:absolute;right:16px;top:calc(16px + env(safe-area-inset-top,0px));font-size:calc(9px*var(--fs));letter-spacing:.2em;opacity:.6;font-weight:700}
@@ -592,7 +592,7 @@ button,input,select,textarea{font-family:inherit}
 
 
 /* Salli account and cloud access */
-.auth-shell{min-height:100dvh;display:grid;place-items:center;padding:24px;background:var(--bg)}
+.auth-spinner{width:26px;height:26px;border:3px solid var(--line);border-top-color:var(--pos);border-radius:50%;margin:18px auto 4px;animation:salli-spin .8s linear infinite}@keyframes salli-spin{to{transform:rotate(360deg)}}.auth-shell{min-height:100dvh;display:grid;place-items:center;padding:24px;background:var(--bg)}
 .auth-card{width:min(100%,430px);background:var(--card);border:1px solid var(--line);border-radius:24px;padding:24px;box-shadow:var(--shadow)}
 .auth-brand{font-size:25px;font-weight:800;letter-spacing:.04em;color:var(--accent);margin-bottom:4px}
 .auth-sub{color:var(--muted);font-size:13px;margin:0 0 22px}
@@ -617,7 +617,7 @@ button,input,select,textarea{font-family:inherit}
 /* =================================================================
    Salli Money Manager — core: helpers, currencies, state, derived data
    ================================================================= */
-const APP_NAME='Salli', APP_VER='1.8.0';
+const APP_NAME='Salli', APP_VER='1.8.2';
 let KEY='salli.mm.v2';
 const KEY_BASE='salli.mm.v2';
 const NATIVE=!!(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform());
@@ -685,9 +685,11 @@ function usdRate(c){if(c==='USD')return 1;
   const L=S.live&&S.live.rates;if(L&&+L[c])return +L[c];return CURM[c]?CURM[c].usd:0}
 const LIVE_URL='https://open.er-api.com/v6/latest/USD';
 async function refreshLiveRates(force){
-  if(!force&&S.live&&S.live.date===today())return 'fresh';
+  const lastFetch=S.live?.at?Date.parse(S.live.at):0;
+  const rateCacheFresh=lastFetch&&Date.now()-lastFetch<6*60*60*1000;
+  if(!force&&S.live&&rateCacheFresh)return 'fresh';
   try{const r=await fetch(LIVE_URL,{cache:'no-store'});if(!r.ok)throw 0;const j=await r.json();if(!j||!j.rates||!j.rates.LKR)throw 0;
-    S.live={date:today(),at:new Date().toISOString(),rates:j.rates,source:'open.er-api.com'};save();return 'updated'}catch(e){return 'failed'}
+    S.live={date:today(),at:new Date().toISOString(),providerUpdatedAt:j.time_last_update_utc||null,providerNextUpdateAt:j.time_next_update_utc||null,rates:j.rates,source:'open.er-api.com'};save();return 'updated'}catch(e){return 'failed'}
 }
 /* Currencies the user works with: shown first in every picker */
 function curOrder(){const mine=(S.settings.myCurrencies||[]).filter(c=>CURM[c]);return [...mine.map(c=>CURM[c]),...CUR.filter(c=>!mine.includes(c[0])).map(c=>CURM[c[0]])]}
@@ -1038,6 +1040,7 @@ function render(scrollTop){
   // a new screen is drawn fresh; changes on the same screen are patched in place
   keepFocus(()=>{if(scrollTop||app.dataset.scr!==c.n){app.innerHTML=html;app.dataset.scr=c.n}else morph(app,html)});
   renderLayer();
+  document.body.classList.toggle('drawer-open',DRAWER);document.documentElement.classList.toggle('drawer-open',DRAWER);
   if(scrollTop)window.scrollTo(0,0);
   if(r.after)r.after();
 }
@@ -3002,12 +3005,13 @@ window.addEventListener('popstate',()=>{});
 /* =================================================================
    Salli account access, approval queue and per-user cloud sync
    ================================================================= */
-let authView='signin';
+let authView='signin';let salliAdminPageOpen=false;
 function authSafe(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function authScreen(view='signin',message='',isError=false){
-  authView=view;const pending=view==='pending',rejected=view==='rejected',offline=view==='offline',recovery=view==='recovery';
+  authView=view;const pending=view==='pending',rejected=view==='rejected',offline=view==='offline',recovery=view==='recovery',loading=view==='loading';
   let body='';
-  if(view==='signin'||view==='signup'){
+  if(loading){body='<div style="padding:28px 0;text-align:center"><div class="auth-sub">Checking your secure session…</div><div class="auth-spinner" aria-label="Loading"></div></div>'}
+  else if(view==='signin'||view==='signup'){
     body=`<h2>${view==='signup'?'Create your Salli account':'Welcome back'}</h2><p class="auth-sub">${view==='signup'?'Register to request access. The administrator must approve your account.':'Sign in to access your personal money manager.'}</p>
       <form id="salli-auth-form"><label class="auth-field" for="salli-email">Email address</label><input class="auth-input" id="salli-email" type="email" autocomplete="email" required maxlength="254" placeholder="you@example.com">
       <label class="auth-field" for="salli-password">Password</label><input class="auth-input" id="salli-password" type="password" autocomplete="${view==='signup'?'new-password':'current-password'}" minlength="8" required placeholder="At least 8 characters">
@@ -3123,17 +3127,18 @@ function showCloudConflict(){
   d.querySelector('#salli-use-device').onclick=()=>{cloudLastRemoteAt=cloudConflict.remote.updated_at;cloudDirty=true;cloudConflict=null;d.remove();queueCloudSync(200)};
 }
 async function showSalliAdmin(){
+  salliAdminPageOpen=true;DRAWER=false;document.body.classList.remove('drawer-open');
   removeCloudAdminButton();app.innerHTML='<div class="auth-shell"><section class="auth-card"><h2>Registration approvals</h2><p class="auth-sub">Loading account requests…</p></section></div>';
   try{
     const {data,error}=await cloudClient.from('profiles').select('user_id,email,status,role,created_at,full_name,phone,country,profile_completed').order('created_at',{ascending:false});if(error)throw error;
     const rows=(data||[]).filter(x=>x.user_id!==cloudUser.id);
     app.innerHTML=`<div class="auth-shell" style="align-items:start"><section class="auth-card" style="margin:20px auto"><div class="auth-brand">SALLI ADMIN</div><h2>Registration approvals</h2><p class="auth-sub">Review new accounts. Only approved accounts can access Salli data.</p><button id="salli-admin-back" class="auth-link">← Back to Salli</button><div id="salli-admin-list">${rows.length?rows.map(x=>`<article class="admin-list"><b>${authSafe(x.full_name||x.email||'No email')}</b><div style="font-size:12px;color:var(--muted);margin-top:3px">${authSafe(x.email||'No email')}</div>${x.phone?`<div style="font-size:12px;color:var(--muted);margin-top:3px">Phone: ${authSafe(x.phone)}</div>`:''}${x.country?`<div style="font-size:12px;color:var(--muted);margin-top:3px">Country: ${authSafe(x.country)}</div>`:''}<div style="font-size:12px;color:var(--muted);margin-top:4px">${authSafe(x.status)} · ${new Date(x.created_at).toLocaleString()}</div>${x.status==='pending'?`<div class="admin-actions"><button class="approve" data-profile-action="approved" data-user="${authSafe(x.user_id)}">Approve</button><button class="reject" data-profile-action="rejected" data-user="${authSafe(x.user_id)}">Reject</button></div>`:x.status==='approved'?`<div class="admin-actions"><button class="reject" data-profile-action="suspended" data-user="${authSafe(x.user_id)}">Suspend</button></div>`:`<div class="admin-actions"><button class="approve" data-profile-action="approved" data-user="${authSafe(x.user_id)}">Approve</button></div>`}</article>`).join(''):'<p class="auth-sub">No other registered users yet.</p>'}</div></section></div>`;
-    document.getElementById('salli-admin-back').onclick=()=>{app.dataset.scr='';render();addCloudAdminButton()};
+    document.getElementById('salli-admin-back').onclick=()=>{salliAdminPageOpen=false;app.dataset.scr='';DRAWER=true;render();addCloudAdminButton()};
     app.querySelectorAll('[data-profile-action]').forEach(btn=>btn.addEventListener('click',async()=>{btn.disabled=true;const {error}=await cloudClient.from('profiles').update({status:btn.dataset.profileAction}).eq('user_id',btn.dataset.user);if(error){alert('Could not update account: '+error.message);btn.disabled=false;return}showSalliAdmin()}));
-  }catch(e){app.innerHTML=`<div class="auth-shell"><section class="auth-card"><h2>Admin dashboard unavailable</h2><p class="auth-sub">${authSafe(e.message)}</p><button class="auth-btn" id="salli-admin-back2">Back to Salli</button></section></div>`;document.getElementById('salli-admin-back2').onclick=()=>{render();addCloudAdminButton()}}
+  }catch(e){app.innerHTML=`<div class="auth-shell"><section class="auth-card"><h2>Admin dashboard unavailable</h2><p class="auth-sub">${authSafe(e.message)}</p><button class="auth-btn" id="salli-admin-back2">Back to Salli</button></section></div>`;document.getElementById('salli-admin-back2').onclick=()=>{salliAdminPageOpen=false;DRAWER=true;render();addCloudAdminButton()}}
 }
 async function startSalliCloud(){
-  authScreen('signin');
+  authScreen('loading');
   if(!navigator.onLine&&!localStorage.getItem('sb-'+new URL(SUPABASE_URL).hostname.split('.')[0]+'-auth-token')){authScreen('offline');return}
   if(!window.supabase?.createClient){authScreen('offline','Could not load the secure sign-in library. Connect to the internet and reload.',true);return}
   try{
@@ -3143,12 +3148,12 @@ async function startSalliCloud(){
     if(data.session){
       if(!navigator.onLine){const cached=JSON.parse(localStorage.getItem('salli.profile.'+data.session.user.id)||'null');if(cached?.status==='approved'){cloudUser=data.session.user;cloudProfile=cached;KEY=cloudLocalKey(cloudUser.id);S=patchSalliState(load());UNLOCKED=!S.settings.pin;app.dataset.scr='';render();addCloudAdminButton();}else authScreen('offline')}
       else await loadSalliProfile(true)
-    }else if(!navigator.onLine)authScreen('offline');
+    }else if(!navigator.onLine)authScreen('offline');else authScreen('signin');
   }catch(e){console.error(e);authScreen('signin',e.message||'Unable to initialize secure sign-in.',true)}
 }
-window.addEventListener('online',()=>{if(cloudUser){loadSalliProfile(false).catch(e=>console.warn(e));if(cloudDirty)queueCloudSync(300)}});
+window.addEventListener('online',()=>{if(cloudUser){loadSalliProfile(false).catch(e=>console.warn(e));if(cloudDirty)queueCloudSync(300)}if(UNLOCKED)refreshLiveRates().then(r=>{if(r==='updated'&&UNLOCKED)render()})});
 window.addEventListener('offline',()=>{const dot=document.getElementById('salli-sync-indicator');if(dot)dot.textContent='Offline · saved on this device'});
-document.addEventListener('visibilitychange',()=>{if(!document.hidden&&cloudDirty)queueCloudSync(200)});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){if(cloudDirty)queueCloudSync(200);if(UNLOCKED)refreshLiveRates().then(r=>{if(r==='updated'&&UNLOCKED)render()})}});
 
 startSalliCloud();
 if(posted&&UNLOCKED)toast(posted+' FD interest payment'+(posted>1?'s':'')+' added');
@@ -3157,7 +3162,7 @@ if('serviceWorker' in navigator&&!NATIVE&&location.protocol.startsWith('http'))n
 
 // Android hardware back button (Capacitor native build)
 try{const AppP=window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins.App;
-  if(AppP)AppP.addListener('backButton',()=>{if(MENU){MENU=null;renderLayer();return}if(SH.length||DRAWER||NAV.length>1){back();return}
+  if(AppP)AppP.addListener('backButton',()=>{if(salliAdminPageOpen){salliAdminPageOpen=false;DRAWER=true;render();addCloudAdminButton();return}if(MENU){MENU=null;renderLayer();return}if(SH.length||DRAWER||NAV.length>1){back();return}
     if(!TABS.includes(cur().n)||cur().n!=='home'){tab('home');return}
     dialog('Exit App','Do you really want to exit the app?',[{l:'Cancel'},{l:'Exit',primary:true,a:()=>AppP.exitApp()}])})}catch(e){}
 
