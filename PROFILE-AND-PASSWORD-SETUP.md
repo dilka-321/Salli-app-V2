@@ -20,3 +20,7 @@ In Supabase Dashboard → Authentication → URL Configuration:
 - Save changes.
 
 Keep email confirmation enabled. Test password recovery with a test account before inviting users. Never put a Supabase secret/service-role key in the app.
+
+
+## Profile editor update (v1.8.1)
+Run `supabase/migrations/202611050002_profile_details_self_edit.sql` in the Supabase SQL Editor before deploying v1.8.1. This lets any approved account, including the administrator, update only its own profile details.
