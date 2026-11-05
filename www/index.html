@@ -10,6 +10,8 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="manifest" href="./manifest.webmanifest">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700;800&family=DM+Sans:wght@400;500;600;700;800&family=Nunito:wght@400;500;600;700;800&family=Roboto:wght@400;500;700;900&family=Lora:wght@400;500;600;700&family=Noto+Sans+Sinhala:wght@400;600&family=Noto+Sans+Tamil:wght@400;600&display=swap">
@@ -588,6 +590,24 @@ button,input,select,textarea{font-family:inherit}
 
 @media print{body::before,.top,.nav,.fab,.bottombar,#layer,.toast{display:none!important}body{background:#fff}.screen{padding:0}.rep-wrap{background:#fff;padding:0;gap:0}.page{box-shadow:none;border-radius:0;break-after:page;min-height:auto}}
 
+
+/* Salli account and cloud access */
+.auth-shell{min-height:100dvh;display:grid;place-items:center;padding:24px;background:var(--bg)}
+.auth-card{width:min(100%,430px);background:var(--card);border:1px solid var(--line);border-radius:24px;padding:24px;box-shadow:var(--shadow)}
+.auth-brand{font-size:25px;font-weight:800;letter-spacing:.04em;color:var(--accent);margin-bottom:4px}
+.auth-sub{color:var(--muted);font-size:13px;margin:0 0 22px}
+.auth-card h2{font-size:21px;margin:8px 0}
+.auth-field{display:block;margin:14px 0 6px;font-size:12px;color:var(--muted);font-weight:600}
+.auth-input{width:100%;padding:13px 14px;border:1px solid var(--line);border-radius:12px;background:var(--field);color:var(--fg);outline:none}
+.auth-input:focus{border-color:var(--accent)}
+.auth-btn{width:100%;border-radius:12px;padding:13px 16px;background:var(--accent);color:var(--accent-ink);font-weight:700;margin-top:16px}
+.auth-link{color:var(--accent);font-weight:600;padding:12px 4px;margin-top:8px}
+.auth-message{font-size:13px;color:var(--muted);margin:12px 0;min-height:18px;white-space:pre-wrap}
+.auth-error{color:var(--red)}
+.admin-list{border:1px solid var(--line);border-radius:14px;padding:13px;margin:10px 0;background:var(--card)}
+.admin-actions{display:flex;gap:8px;margin-top:10px}.admin-actions button{border:1px solid var(--line);border-radius:9px;padding:8px 12px;font-weight:600}.admin-actions .approve{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}.admin-actions .reject{color:var(--red)}
+.cloud-admin-fab{position:fixed;z-index:50;right:16px;bottom:calc(90px + env(safe-area-inset-bottom,0px));padding:10px 14px;border-radius:999px;background:var(--accent);color:var(--accent-ink);font-weight:700;box-shadow:var(--shadow)}
+.cloud-status{font-size:11px;color:var(--muted);text-align:center;margin-top:14px}
 </style>
 </head>
 <body>
@@ -599,7 +619,8 @@ button,input,select,textarea{font-family:inherit}
    Salli Money Manager — core: helpers, currencies, state, derived data
    ================================================================= */
 const APP_NAME='Salli', APP_VER='1.7.0';
-const KEY='salli.mm.v2';
+let KEY='salli.mm.v2';
+const KEY_BASE='salli.mm.v2';
 const NATIVE=!!(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform());
 const STANDALONE=!NATIVE&&(()=>{try{return window.self===window.top}catch(e){return false}})();
 const $=s=>document.querySelector(s);
@@ -724,7 +745,7 @@ const ic=(n,sw=1.9)=>`<svg width="20" height="20" viewBox="0 0 24 24" fill="none
 
 /* ---------------- State ---------------- */
 function load(){try{const r=localStorage.getItem(KEY);return r?JSON.parse(r):null}catch(e){return null}}
-function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S));if(cloudUser){cloudDirty=true;const m=JSON.parse(localStorage.getItem(cloudMetaKey())||'{}');m.dirty=true;m.savedAt=new Date().toISOString();localStorage.setItem(cloudMetaKey(),JSON.stringify(m));if(cloudReady)queueCloudSync()}}catch(e){}}
 const ASSET_GROUPS=['Cash','Bank','Lending','Fixed Assets','Saving Goals','Investment'];
 const LIAB_GROUPS=['Credit Card','Loan','Installment','Other Liability'];
 const DEF_GROUP={'Bank':'Bank','Cash':'Cash','Emergency Fund':'Saving Goals','Investment':'Investment','Fixed Deposit':'Investment','Gold':'Fixed Assets','Property':'Fixed Assets','Vehicle':'Fixed Assets','Lending':'Lending','Bank Loan':'Loan','Personal Loan':'Loan','Credit Card':'Credit Card','Installment Plan':'Installment'};
@@ -785,7 +806,7 @@ function seedSample(){
   return s;
 }
 let S=load();
-if(!S){S=seedSample()}
+if(!S){S=baseState()}
 else{const b=baseState();for(const k in b)if(S[k]===undefined)S[k]=b[k];for(const k in b.settings)if(S.settings[k]===undefined)S.settings[k]=b.settings[k];
   if(!S.settings.widgets.includes('fds'))S.settings.widgets.splice(Math.max(0,S.settings.widgets.indexOf('accounts')+1),0,'fds');}
 S.assetTypes.forEach(t=>{if(!t.group)t.group=DEF_GROUP[t.name]||(t.kind==='liability'?'Other Liability':'Fixed Assets');if(t.fd===undefined)t.fd=t.name==='Fixed Deposit'});
@@ -907,6 +928,12 @@ const T=k=>(LANG[S.settings.lang]||{})[k]||k;
    UI framework: router, render, sheets, dialogs, toast, keypad, pickers
    ================================================================= */
 const app=document.getElementById('app'),layer=document.getElementById('layer');
+let cloudClient=null,cloudUser=null,cloudProfile=null,cloudReady=false,cloudSyncTimer=null,cloudSyncBusy=false,cloudLastRemoteAt=null,cloudDirty=false,cloudConflict=null;
+const SUPABASE_URL='https://mnmgpmgfgoccisercvuo.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY='sb_publishable_3RVgPIGUy6GQLfPC0Jt83A_Zcaa8bWj';
+const SUPABASE_REDIRECT_URL='https://dilka-321.github.io/Salli-app-V2/';
+function cloudMetaKey(){return KEY+'.syncmeta'}
+function cloudLocalKey(userId){return KEY_BASE+'.user.'+userId}
 let NAV=[{n:'home',p:{}}];
 const SCR={};          // screen renderers: SCR.name = p => ({html, title?, top?, nav?, fab?})
 const A={};            // actions: A.name = (el, ds, ev)
@@ -2394,10 +2421,11 @@ SCR.settings=()=>{const s=S.settings;const th=(v,l,i)=>`<button class="row" styl
    <h2 class="acc sethd">Preferences</h2>
    ${rowb('setlang','globe','Choose language',{en:'English',si:'සිංහල',ta:'தமிழ்'}[s.lang])}${rowb('go','money','Currency Settings','Base currency: '+s.base+' — '+(CURM[s.base]?.name||''),'data-n="currency"')}${rowb('go','fx','Exchange Rates','View and manage currency exchange rates','data-n="rates"')}${rowb('go','bell','Notification Settings','Configure app reminders','data-n="notifset"')}
    ${rowt('lock','App Lock','Enable PIN lock','st_lock',!!s.pin,'setlock')}<div class="setrow" style="${s.pin?'':'opacity:.55'}">${ic('key')}<span class="grow"><b>Biometric Unlock</b><small>${s.pin?'Unlock with fingerprint or face. Your PIN still works as a backup.':'Turn on App Lock first. Your PIN is the backup.'}</small></span>${tgl('st_bio',!!s.bio,'setbio',s.pin?'':'disabled')}</div>${rowt('trend','Share usage data','Help improve the app by sharing anonymous usage analytics','st_share',s.share,'setshare')}
-   <h2 class="acc sethd">Account</h2>${rowb('profile','user','Profile',s.name||'Using anonymously')}${rowb('go','cloud','Backup & Restore','Keep a copy of your data','data-n="backup"')}
+   <h2 class="acc sethd">Account</h2>${rowb('profile','user','Profile',s.name||'Using anonymously')}${rowb('go','cloud','Backup & Restore','Keep a copy of your data','data-n="backup"')}<div class="setrow"><span class="grow"><b>Cloud account</b><small>${esc(cloudUser?.email||'Not signed in')} · <span id="salli-sync-indicator">${navigator.onLine?'Sync enabled':'Offline · saved on this device'}</span></small></span></div><button class="setrow" data-a="cloudsignout"><span class="red">${ic('user')}</span><span class="grow"><b class="red">Sign out</b><small>Sign out of this Salli account</small></span>${ic('chevR')}</button>
    <button class="setrow" style="border-color:var(--red)" data-a="erase"><span class="red">${ic('erase')}</span><span class="grow"><b class="red">Erase Data</b><small>Delete everything on this device</small></span>${ic('chevR')}</button>
-   <p class="tiny muted" style="text-align:center">${APP_NAME} ${APP_VER} · Data stays on this device</p></div>`,fab:false};
+   <p class="tiny muted" style="text-align:center">${APP_NAME} ${APP_VER} · Private account with offline support</p></div>`,fab:false};
 };
+A.cloudsignout=()=>dialog('Sign out of Salli?','Your latest changes are saved on this device and will sync when the connection is available.',[{l:'Cancel'},{l:'Sign out',primary:true,a:()=>salliSignOut()}]);
 A.settheme=el=>{S.settings.theme=el.dataset.v;commit()};
 A.setshare=el=>{S.settings.share=el.checked;save()};
 A.setlang=()=>listPicker('Choose language',[{v:'en',l:'English'},{v:'si',l:'සිංහල',sub:'Sinhala'},{v:'ta',l:'தமிழ்',sub:'Tamil'}],v=>{S.settings.lang=v;commit('Language updated')},{sel:S.settings.lang});
@@ -2970,11 +2998,128 @@ SCR.newBudgetAlias=SCR.newBudget;
 const posted=runFDInterest();
 // auto-renew subscriptions that passed without payment stay overdue (shown in list); nothing to post automatically
 window.addEventListener('popstate',()=>{});
-render();
+/* =================================================================
+   Salli account access, approval queue and per-user cloud sync
+   ================================================================= */
+let authView='signin';
+function authSafe(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function authScreen(view='signin',message='',isError=false){
+  authView=view;const pending=view==='pending',rejected=view==='rejected',offline=view==='offline';
+  let body='';
+  if(view==='signin'||view==='signup'){
+    body=`<h2>${view==='signup'?'Create your Salli account':'Welcome back'}</h2><p class="auth-sub">${view==='signup'?'Register to request access. The administrator must approve your account.':'Sign in to access your personal money manager.'}</p>
+      <form id="salli-auth-form"><label class="auth-field" for="salli-email">Email address</label><input class="auth-input" id="salli-email" type="email" autocomplete="email" required maxlength="254" placeholder="you@example.com">
+      <label class="auth-field" for="salli-password">Password</label><input class="auth-input" id="salli-password" type="password" autocomplete="${view==='signup'?'new-password':'current-password'}" minlength="8" required placeholder="At least 8 characters">
+      ${view==='signup'?'<label class="auth-field" for="salli-password2">Confirm password</label><input class="auth-input" id="salli-password2" type="password" autocomplete="new-password" minlength="8" required placeholder="Enter password again">':''}
+      <button class="auth-btn" type="submit">${view==='signup'?'Create account':'Sign in'}</button></form>
+      <button class="auth-link" id="salli-switch" type="button">${view==='signup'?'Already registered? Sign in':'New here? Create an account'}</button>`;
+  }else if(pending){body=`<div style="font-size:34px">⏳</div><h2>Approval pending</h2><p class="auth-sub">Your email is registered, but an administrator must approve your Salli account before you can access your financial data.</p><button class="auth-btn" id="salli-refresh" type="button">Check approval status</button><button class="auth-link" id="salli-signout" type="button">Sign out</button>`}
+  else if(rejected){body=`<div style="font-size:34px">ⓘ</div><h2>Account not approved</h2><p class="auth-sub">Your registration has not been approved. Please contact the Salli administrator if you think this is a mistake.</p><button class="auth-btn" id="salli-signout" type="button">Sign out</button>`}
+  else if(offline){body=`<div style="font-size:34px">☁️</div><h2>Connection required</h2><p class="auth-sub">Connect to the internet to sign in or register. Once signed in and approved, Salli can keep your saved data available offline on this device.</p><button class="auth-btn" id="salli-retry" type="button">Try again</button>`}
+  app.innerHTML=`<div class="auth-shell"><section class="auth-card"><div class="auth-brand">SALLI</div><p class="auth-sub">Money Manager · Secure personal accounts</p>${body}<p id="salli-auth-message" class="auth-message ${isError?'auth-error':''}">${authSafe(message)}</p><div class="cloud-status">Your financial records are private to your account.</div></section></div>`;
+  const form=document.getElementById('salli-auth-form');if(form)form.addEventListener('submit',submitSalliAuth);
+  document.getElementById('salli-switch')?.addEventListener('click',()=>authScreen(view==='signup'?'signin':'signup'));
+  document.getElementById('salli-signout')?.addEventListener('click',()=>salliSignOut());
+  document.getElementById('salli-refresh')?.addEventListener('click',()=>loadSalliProfile(true));
+  document.getElementById('salli-retry')?.addEventListener('click',()=>startSalliCloud());
+}
+function authMessage(message,error=false){const el=document.getElementById('salli-auth-message');if(el){el.textContent=message;el.className='auth-message'+(error?' auth-error':'')}}
+async function submitSalliAuth(ev){
+  ev.preventDefault();if(!cloudClient){authMessage('Secure sign-in is unavailable. Check your internet connection and reload.',true);return}
+  const email=document.getElementById('salli-email').value.trim(),password=document.getElementById('salli-password').value;
+  const submit=ev.target.querySelector('button[type=submit]');submit.disabled=true;submit.textContent='Please wait…';
+  try{
+    if(authView==='signup'){
+      const p2=document.getElementById('salli-password2').value;if(password!==p2)throw new Error('The passwords do not match.');
+      const {data,error}=await cloudClient.auth.signUp({email,password,options:{emailRedirectTo:SUPABASE_REDIRECT_URL}});if(error)throw error;
+      if(data.session){await loadSalliProfile(true)}else authScreen('signin','Registration received. Check your email for a confirmation link, then sign in.');
+    }else{
+      const {data,error}=await cloudClient.auth.signInWithPassword({email,password});if(error)throw error;await loadSalliProfile(true);
+    }
+  }catch(e){authMessage(e.message||'Could not complete that request.',true)}finally{if(submit){submit.disabled=false;submit.textContent=authView==='signup'?'Create account':'Sign in'}}
+}
+async function salliSignOut(){cloudReady=false;cloudUser=null;cloudProfile=null;cloudDirty=false;cloudLastRemoteAt=null;try{await cloudClient?.auth.signOut()}catch(e){}KEY=KEY_BASE;S=baseState();UNLOCKED=true;removeCloudAdminButton();authScreen('signin','You have been signed out.')}
+function removeCloudAdminButton(){document.getElementById('salli-admin-fab')?.remove()}
+function addCloudAdminButton(){removeCloudAdminButton();if(cloudProfile?.role==='admin'){const b=document.createElement('button');b.id='salli-admin-fab';b.className='cloud-admin-fab';b.textContent='Admin approvals';b.addEventListener('click',showSalliAdmin);document.body.appendChild(b)}}
+async function loadSalliProfile(showPending=false){
+  if(!cloudClient)return;const {data:{user},error:se}=await cloudClient.auth.getUser();if(se)throw se;if(!user){authScreen('signin');return}
+  cloudUser=user;let prof;
+  for(let i=0;i<4;i++){const {data,error}=await cloudClient.from('profiles').select('user_id,email,role,status,created_at').eq('user_id',user.id).maybeSingle();if(error)throw error;if(data){prof=data;break}await new Promise(r=>setTimeout(r,450))}
+  if(!prof){authScreen('signin','Your profile is being created. Please sign in again in a moment.',true);return}
+  cloudProfile=prof;localStorage.setItem('salli.profile.'+user.id,JSON.stringify(prof));
+  if(prof.status!=='approved'){cloudReady=false;removeCloudAdminButton();authScreen(prof.status==='rejected'?'rejected':'pending');return}
+  await openSalliWorkspace();
+}
+function patchSalliState(data){const b=baseState();if(!data||typeof data!=='object')return b;const out=Object.assign(b,data);out.settings=Object.assign(b.settings,data.settings||{});for(const k in b)if(out[k]===undefined)out[k]=b[k];for(const k in b.settings)if(out.settings[k]===undefined)out.settings[k]=b.settings[k];if(!out.settings.widgets.includes('fds'))out.settings.widgets.splice(Math.max(0,out.settings.widgets.indexOf('accounts')+1),0,'fds');return out}
+async function openSalliWorkspace(){
+  cloudReady=false;KEY=cloudLocalKey(cloudUser.id);let local=null,meta={};try{const raw=localStorage.getItem(KEY);local=raw?JSON.parse(raw):null;meta=JSON.parse(localStorage.getItem(cloudMetaKey())||'{}')}catch(e){}
+  let remote=null;try{const {data,error}=await cloudClient.from('user_data').select('data,updated_at').eq('user_id',cloudUser.id).maybeSingle();if(error)throw error;remote=data}catch(e){if(!navigator.onLine&&!local){authScreen('offline');return}if(!local)throw e}
+  if(local&&remote){
+    const baseline=meta.lastSyncedRemoteAt;
+    if(meta.dirty&&baseline&&Date.parse(remote.updated_at)>Date.parse(baseline)){cloudConflict={remote,local};showCloudConflict();return}
+    if(meta.dirty&&!baseline){S=patchSalliState(local);cloudDirty=true;cloudLastRemoteAt=remote.updated_at}
+    else{S=patchSalliState(remote.data);cloudDirty=false;cloudLastRemoteAt=remote.updated_at}
+  }else if(local){S=patchSalliState(local);cloudDirty=!!meta.dirty;cloudLastRemoteAt=remote?.updated_at||null}
+  else if(remote){S=patchSalliState(remote.data);cloudDirty=false;cloudLastRemoteAt=remote.updated_at}
+  else{S=baseState();cloudDirty=true;cloudLastRemoteAt=null}
+  UNLOCKED=!S.settings.pin;cloudReady=true;localStorage.setItem(KEY,JSON.stringify(S));
+  if(!meta.lastSyncedRemoteAt&&remote&&!meta.dirty){meta.lastSyncedRemoteAt=remote.updated_at;meta.dirty=false;localStorage.setItem(cloudMetaKey(),JSON.stringify(meta))}
+  app.dataset.scr='';NAV=[{n:'home',p:{}}];render();addCloudAdminButton();
+  if(cloudDirty&&navigator.onLine)queueCloudSync(500);
+  if(UNLOCKED){newMonthCheck();setTimeout(()=>{try{autoBackupCheck()}catch(e){}},1600)}else if(S.settings.bio&&S.settings.bio.mode==='native')setTimeout(()=>A.biounlock(),300);
+  refreshLiveRates().then(r=>{if(r==='updated'&&UNLOCKED)render()});
+}
+function queueCloudSync(delay=1400){if(!cloudReady||!cloudUser)return;clearTimeout(cloudSyncTimer);cloudSyncTimer=setTimeout(()=>syncSalliCloud(),delay)}
+async function syncSalliCloud(){
+  if(!cloudReady||!cloudUser||!navigator.onLine||cloudSyncBusy||!cloudDirty)return;cloudSyncBusy=true;
+  try{
+    const {data:remote,error:readErr}=await cloudClient.from('user_data').select('data,updated_at').eq('user_id',cloudUser.id).maybeSingle();if(readErr)throw readErr;
+    if(remote&&cloudLastRemoteAt&&Date.parse(remote.updated_at)>Date.parse(cloudLastRemoteAt)){
+      cloudSyncBusy=false;cloudConflict={remoteOnly:true,remote};showCloudConflict();return;
+    }
+    const {data,error}=await cloudClient.from('user_data').upsert({user_id:cloudUser.id,data:S,updated_at:new Date().toISOString()},{onConflict:'user_id'}).select('updated_at').single();if(error)throw error;
+    cloudLastRemoteAt=data.updated_at;cloudDirty=false;localStorage.setItem(cloudMetaKey(),JSON.stringify({dirty:false,lastSyncedRemoteAt:data.updated_at,savedAt:new Date().toISOString()}));
+    const dot=document.getElementById('salli-sync-indicator');if(dot)dot.textContent='Synced';
+  }catch(e){console.warn('Salli cloud sync deferred:',e.message);const dot=document.getElementById('salli-sync-indicator');if(dot)dot.textContent='Saved on this device · sync pending'}finally{cloudSyncBusy=false}
+}
+function showCloudConflict(){
+  const old=document.getElementById('salli-cloud-conflict');old?.remove();const d=document.createElement('div');d.id='salli-cloud-conflict';d.style.cssText='position:fixed;inset:0;z-index:9999;background:#000b;display:grid;place-items:center;padding:20px';
+  d.innerHTML=`<section style="max-width:420px;width:100%;background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:18px;padding:22px"><h2 style="margin-top:0">Cloud data changed</h2><p style="color:var(--muted);font-size:13px">This account was updated on another device while this device also has unsynced changes. Choose which complete copy to keep. Choosing one replaces the other copy for this account.</p><button id="salli-use-cloud" class="auth-btn">Use cloud version</button><button id="salli-use-device" class="auth-btn" style="background:var(--card2);color:var(--fg)">Keep this device's version</button><p style="color:var(--muted);font-size:11px">If both devices contain important changes, export a backup from each before choosing.</p></section>`;
+  document.body.appendChild(d);
+  d.querySelector('#salli-use-cloud').onclick=()=>{S=patchSalliState(cloudConflict.remote.data);cloudLastRemoteAt=cloudConflict.remote.updated_at;cloudDirty=false;localStorage.setItem(KEY,JSON.stringify(S));localStorage.setItem(cloudMetaKey(),JSON.stringify({dirty:false,lastSyncedRemoteAt:cloudLastRemoteAt}));cloudConflict=null;d.remove();app.dataset.scr='';render()};
+  d.querySelector('#salli-use-device').onclick=()=>{cloudLastRemoteAt=cloudConflict.remote.updated_at;cloudDirty=true;cloudConflict=null;d.remove();queueCloudSync(200)};
+}
+async function showSalliAdmin(){
+  removeCloudAdminButton();app.innerHTML='<div class="auth-shell"><section class="auth-card"><h2>Registration approvals</h2><p class="auth-sub">Loading account requests…</p></section></div>';
+  try{
+    const {data,error}=await cloudClient.from('profiles').select('user_id,email,status,role,created_at').order('created_at',{ascending:false});if(error)throw error;
+    const rows=(data||[]).filter(x=>x.user_id!==cloudUser.id);
+    app.innerHTML=`<div class="auth-shell" style="align-items:start"><section class="auth-card" style="margin:20px auto"><div class="auth-brand">SALLI ADMIN</div><h2>Registration approvals</h2><p class="auth-sub">Review new accounts. Only approved accounts can access Salli data.</p><button id="salli-admin-back" class="auth-link">← Back to Salli</button><div id="salli-admin-list">${rows.length?rows.map(x=>`<article class="admin-list"><b>${authSafe(x.email||'No email')}</b><div style="font-size:12px;color:var(--muted);margin-top:4px">${authSafe(x.status)} · ${new Date(x.created_at).toLocaleString()}</div>${x.status==='pending'?`<div class="admin-actions"><button class="approve" data-profile-action="approved" data-user="${authSafe(x.user_id)}">Approve</button><button class="reject" data-profile-action="rejected" data-user="${authSafe(x.user_id)}">Reject</button></div>`:x.status==='approved'?`<div class="admin-actions"><button class="reject" data-profile-action="suspended" data-user="${authSafe(x.user_id)}">Suspend</button></div>`:`<div class="admin-actions"><button class="approve" data-profile-action="approved" data-user="${authSafe(x.user_id)}">Approve</button></div>`}</article>`).join(''):'<p class="auth-sub">No other registered users yet.</p>'}</div></section></div>`;
+    document.getElementById('salli-admin-back').onclick=()=>{app.dataset.scr='';render();addCloudAdminButton()};
+    app.querySelectorAll('[data-profile-action]').forEach(btn=>btn.addEventListener('click',async()=>{btn.disabled=true;const {error}=await cloudClient.from('profiles').update({status:btn.dataset.profileAction}).eq('user_id',btn.dataset.user);if(error){alert('Could not update account: '+error.message);btn.disabled=false;return}showSalliAdmin()}));
+  }catch(e){app.innerHTML=`<div class="auth-shell"><section class="auth-card"><h2>Admin dashboard unavailable</h2><p class="auth-sub">${authSafe(e.message)}</p><button class="auth-btn" id="salli-admin-back2">Back to Salli</button></section></div>`;document.getElementById('salli-admin-back2').onclick=()=>{render();addCloudAdminButton()}}
+}
+async function startSalliCloud(){
+  authScreen('signin');
+  if(!navigator.onLine&&!localStorage.getItem('sb-'+new URL(SUPABASE_URL).hostname.split('.')[0]+'-auth-token')){authScreen('offline');return}
+  if(!window.supabase?.createClient){authScreen('offline','Could not load the secure sign-in library. Connect to the internet and reload.',true);return}
+  try{
+    cloudClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,storage:localStorage}});
+    const {data,error}=await cloudClient.auth.getSession();if(error)throw error;
+    if(data.session){
+      if(!navigator.onLine){const cached=JSON.parse(localStorage.getItem('salli.profile.'+data.session.user.id)||'null');if(cached?.status==='approved'){cloudUser=data.session.user;cloudProfile=cached;KEY=cloudLocalKey(cloudUser.id);S=patchSalliState(load());UNLOCKED=!S.settings.pin;app.dataset.scr='';render();addCloudAdminButton();}else authScreen('offline')}
+      else await loadSalliProfile(true)
+    }else if(!navigator.onLine)authScreen('offline');
+  }catch(e){console.error(e);authScreen('signin',e.message||'Unable to initialize secure sign-in.',true)}
+}
+window.addEventListener('online',()=>{if(cloudUser){loadSalliProfile(false).catch(e=>console.warn(e));if(cloudDirty)queueCloudSync(300)}});
+window.addEventListener('offline',()=>{const dot=document.getElementById('salli-sync-indicator');if(dot)dot.textContent='Offline · saved on this device'});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&cloudDirty)queueCloudSync(200)});
+
+startSalliCloud();
 if(posted&&UNLOCKED)toast(posted+' FD interest payment'+(posted>1?'s':'')+' added');
-if(UNLOCKED){newMonthCheck();setTimeout(()=>{try{autoBackupCheck()}catch(e){}},1600)} // + automatic backup when one is due
-else if(S.settings.bio&&S.settings.bio.mode==='native')setTimeout(()=>A.biounlock(),300); // prompt for fingerprint straight away in the Android app
-refreshLiveRates().then(r=>{if(r==='updated'&&UNLOCKED)render()});
+
+if('serviceWorker' in navigator&&!NATIVE&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js').catch(e=>console.warn('Salli offline cache unavailable',e));
 
 // Android hardware back button (Capacitor native build)
 try{const AppP=window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins.App;

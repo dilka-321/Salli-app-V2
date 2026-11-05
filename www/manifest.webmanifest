@@ -1,0 +1,13 @@
+{
+  "name": "Salli Money Manager",
+  "short_name": "Salli",
+  "description": "Private personal money manager with offline support",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#12161B",
+  "theme_color": "#12161B",
+  "icons": [
+    {"src": "./icons/salli.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable"}
+  ]
+}

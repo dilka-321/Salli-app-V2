@@ -1,37 +1,55 @@
-# Salli Money Manager — Android app
+# Salli Money Manager
 
-This folder turns the Salli web app (`www/index.html`) into an installable Android APK using Capacitor.
+Salli is a single-page money manager packaged for Android with Capacitor and published as a progressive web app (PWA).
 
-## Option A — build the APK in the cloud with GitHub (no Android Studio needed)
-1. Create a free GitHub account and a new repository.
-2. Upload everything in this folder (including the hidden `.github` folder) to the repository.
-3. Open the **Actions** tab. The "Build Android APK" workflow runs automatically (about 5–8 minutes).
-4. Open the finished run and download **Salli-APK** from "Artifacts". Unzip it to get `app-debug.apk`.
-5. Copy the APK to your phone, open it and allow "Install unknown apps" when asked.
+## Cloud accounts and data
 
-## Option B — build on your computer
-Requirements: Node.js 18+, JDK 17 and Android Studio (with the Android SDK).
-```
+- Supabase email/password authentication.
+- New registrations create a `pending` profile; an administrator must approve them.
+- Each approved account stores its own JSON app state in `public.user_data`.
+- Row Level Security must remain enabled on `profiles` and `user_data`.
+- The browser app uses only the Supabase publishable key. Never place a Supabase secret/service-role key in this repository.
+- Local data is namespaced by Supabase user ID. Changes are saved locally first and queued for cloud sync.
+- If another device changed the cloud copy while this device has unsynced changes, Salli asks which complete copy to keep. Export backups from both devices before resolving if both contain important changes.
+
+## Supabase configuration
+
+This repository is configured for the Salli Supabase project and GitHub Pages URL:
+
+`https://dilka-321.github.io/Salli-app-V2/`
+
+In Supabase, set **Authentication → URL Configuration**:
+
+- Site URL: `https://dilka-321.github.io/Salli-app-V2/`
+- Redirect URL allow-list: `https://dilka-321.github.io/Salli-app-V2/`
+
+The database must contain the `profiles` and `user_data` tables, the new-user profile trigger, `is_admin()` / `is_approved()` functions, and the RLS policies created in the setup SQL. The first administrator must be assigned through the SQL Editor, not from the public app.
+
+## Website deployment
+
+1. Push this repository to the `main` branch.
+2. In GitHub, open **Settings → Pages** and set **Build and deployment → Source** to **GitHub Actions**.
+3. The `Deploy Salli website` workflow publishes the contents of `www/` to GitHub Pages.
+4. The site URL is `https://dilka-321.github.io/Salli-app-V2/`.
+
+The PWA service worker caches the app shell and Supabase browser SDK after an online visit. A first-time sign-in still requires internet access.
+
+## Android APK
+
+The existing `Build Android APK` GitHub Actions workflow builds a debug APK. Push to `main` or run it manually from **Actions**; download the `Salli-APK` artifact.
+
+For local builds, use Node.js 18+, JDK 17 and Android Studio:
+
+```sh
 npm install
 npx cap add android
-# allow fingerprint / face unlock: add this line to android/app/src/main/AndroidManifest.xml (inside <manifest>)
-#   <uses-permission android:name="android.permission.USE_BIOMETRIC" />
-npm run android:apk        # APK at android/app/build/outputs/apk/debug/app-debug.apk
-npm run android:open       # or open the project in Android Studio
+npx cap sync android
+cd android && ./gradlew assembleDebug
 ```
 
-## Updating the app
-Replace `www/index.html` with a new version and run `npx cap sync android` (or push to GitHub again).
+## Important operational notes
 
-## Publishing to Google Play
-Build a signed release bundle in Android Studio (Build → Generate Signed Bundle / APK) and upload the `.aab` in the Google Play Console.
-
-## Notes
-- Biometric unlock: Settings → turn on App Lock (PIN), then Biometric Unlock. The phone asks for your fingerprint or face when the app opens; the PIN always works as a backup.
-- Exchange rates update automatically once a day when the phone is online (source: open.er-api.com). Manual rates in Settings → Exchange Rates always take priority.
-- The share buttons open Android's share sheet (WhatsApp, Gmail, etc.).
-- Reports: the Share button on Export Preview creates a real PDF or Excel (.xlsx) file. "Share" opens the share sheet with the file; "Save to phone" saves it to Download/Salli (or Documents/Salli).
-- Backup & Restore: "Backup Now" saves a backup file to Download/Salli/Backups or shares it (Gmail, Drive, WhatsApp). "Restore Data" opens the file picker; choose the backup .json file. Optional auto backup (daily/weekly/monthly) with a one-tap "Send to Gmail" reminder.
-- All data is stored on the phone. Use **Backup & Restore** in the app to keep a copy.
-- The Android back button navigates back inside the app and asks before exiting.
-- Automatic SMS reading needs an extra native SMS plugin and the READ_SMS permission (Google Play restricts this permission); the built-in SMS Parser works by pasting messages.
+- This project does not include a Supabase secret key.
+- Supabase free-tier quotas and inactivity/pause policies apply; “free” is not a guarantee of unlimited or permanent hosting.
+- Offline changes stay on that device until synchronization succeeds. Use **Backup & Restore** for independent backups.
+- The cloud row stores the app's complete state as one JSON document per user. Avoid editing the same account on multiple devices simultaneously; if a conflict occurs, Salli asks which full copy to retain.
