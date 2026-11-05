@@ -1,4 +1,4 @@
-const CACHE_NAME = 'salli-shell-v1';
+const CACHE_NAME = 'salli-shell-v2';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icons/salli.svg'];
 const SUPABASE_SDK = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
 self.addEventListener('install', event => {

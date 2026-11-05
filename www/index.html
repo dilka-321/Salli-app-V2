@@ -606,7 +606,6 @@ button,input,select,textarea{font-family:inherit}
 .auth-error{color:var(--red)}
 .admin-list{border:1px solid var(--line);border-radius:14px;padding:13px;margin:10px 0;background:var(--card)}
 .admin-actions{display:flex;gap:8px;margin-top:10px}.admin-actions button{border:1px solid var(--line);border-radius:9px;padding:8px 12px;font-weight:600}.admin-actions .approve{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}.admin-actions .reject{color:var(--red)}
-.cloud-admin-fab{position:fixed;z-index:50;right:16px;bottom:calc(90px + env(safe-area-inset-bottom,0px));padding:10px 14px;border-radius:999px;background:var(--accent);color:var(--accent-ink);font-weight:700;box-shadow:var(--shadow)}
 .cloud-status{font-size:11px;color:var(--muted);text-align:center;margin-top:14px}
 </style>
 </head>
@@ -618,7 +617,7 @@ button,input,select,textarea{font-family:inherit}
 /* =================================================================
    Salli Money Manager — core: helpers, currencies, state, derived data
    ================================================================= */
-const APP_NAME='Salli', APP_VER='1.7.0';
+const APP_NAME='Salli', APP_VER='1.8.0';
 let KEY='salli.mm.v2';
 const KEY_BASE='salli.mm.v2';
 const NATIVE=!!(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform());
@@ -1094,12 +1093,13 @@ function drawerHTML(){
   <div class="dsec o">${T('PLANNING')}</div>${it('plans','Monthly Plan','plan','green')}${it('splans','Spending Plan','budget','blue')}${it('ot','OT & Salary','salary','green')}${it('subs','Subscriptions','sub','orange')}${it('recurring','Recurring Expenses','repeat','orange')}
   <div class="dsec r">${T('LOANS & ASSETS')}</div>${it('loans','Loans','bank','red')}${it('analyzer','Loan Analyzer','analyze','red')}${it('lendings','Lendings','hand','orange')}${it('assets','My Assets','asset','green')}${it('installments','Installments','inst','blue')}
   <div class="dsec b">${T('PRODUCTIVITY')}</div>${it('goals','Goals','goal','green')}${it('todos','To-Do List','todo','blue')}${it('priorities','Priority Board','prio','purple')}
-  <div class="dsec p">${T('SETTINGS')}</div>${it('categories','Categories','cat','purple')}${it('tags','Tags','tag','purple')}${it('acctSetup','Account Setup','setup','blue')}${it('dashboard','Customize Dashboard','dash','green')}${it('backup','Backup & Restore','cloud','green')}${it('settings','Settings','gear','blue')}
+  <div class="dsec p">${T('SETTINGS')}</div>${it('categories','Categories','cat','purple')}${it('tags','Tags','tag','purple')}${it('acctSetup','Account Setup','setup','blue')}${it('dashboard','Customize Dashboard','dash','green')}${it('backup','Backup & Restore','cloud','green')}${it('settings','Settings','gear','blue')}${cloudProfile?.role==='admin'?`<div class="dsec">ADMINISTRATION</div><button class="ditem" data-a="adminapprovals"><span class="ic blue">${ic('user')}</span>Admin approvals</button>`:''}
   <p class="small faint" style="text-align:center;margin:18px 0 0">Version ${APP_VER}</p></aside>`;
 }
 A.drawer=()=>{DRAWER=true;render()};
 A.drawerclose=()=>{DRAWER=false;render()};
 A.dgo=el=>{DRAWER=false;go(el.dataset.n)};
+A.adminapprovals=()=>{DRAWER=false;showSalliAdmin()};
 
 /* ---------- events ---------- */
 let LP=null,LPfired=false;
@@ -3004,7 +3004,7 @@ window.addEventListener('popstate',()=>{});
 let authView='signin';
 function authSafe(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function authScreen(view='signin',message='',isError=false){
-  authView=view;const pending=view==='pending',rejected=view==='rejected',offline=view==='offline';
+  authView=view;const pending=view==='pending',rejected=view==='rejected',offline=view==='offline',recovery=view==='recovery';
   let body='';
   if(view==='signin'||view==='signup'){
     body=`<h2>${view==='signup'?'Create your Salli account':'Welcome back'}</h2><p class="auth-sub">${view==='signup'?'Register to request access. The administrator must approve your account.':'Sign in to access your personal money manager.'}</p>
@@ -3012,18 +3012,48 @@ function authScreen(view='signin',message='',isError=false){
       <label class="auth-field" for="salli-password">Password</label><input class="auth-input" id="salli-password" type="password" autocomplete="${view==='signup'?'new-password':'current-password'}" minlength="8" required placeholder="At least 8 characters">
       ${view==='signup'?'<label class="auth-field" for="salli-password2">Confirm password</label><input class="auth-input" id="salli-password2" type="password" autocomplete="new-password" minlength="8" required placeholder="Enter password again">':''}
       <button class="auth-btn" type="submit">${view==='signup'?'Create account':'Sign in'}</button></form>
+      ${view==='signin'?'<button class="auth-link" id="salli-forgot" type="button">Forgot password?</button>':''}
       <button class="auth-link" id="salli-switch" type="button">${view==='signup'?'Already registered? Sign in':'New here? Create an account'}</button>`;
+  }else if(recovery){
+    body=`<h2>Set a new password</h2><p class="auth-sub">Choose a new password for your Salli account.</p><form id="salli-recovery-form"><label class="auth-field" for="salli-new-password">New password</label><input class="auth-input" id="salli-new-password" type="password" autocomplete="new-password" minlength="8" required placeholder="At least 8 characters"><label class="auth-field" for="salli-new-password2">Confirm new password</label><input class="auth-input" id="salli-new-password2" type="password" autocomplete="new-password" minlength="8" required placeholder="Enter password again"><button class="auth-btn" type="submit">Update password</button></form>`;
   }else if(pending){body=`<div style="font-size:34px">⏳</div><h2>Approval pending</h2><p class="auth-sub">Your email is registered, but an administrator must approve your Salli account before you can access your financial data.</p><button class="auth-btn" id="salli-refresh" type="button">Check approval status</button><button class="auth-link" id="salli-signout" type="button">Sign out</button>`}
   else if(rejected){body=`<div style="font-size:34px">ⓘ</div><h2>Account not approved</h2><p class="auth-sub">Your registration has not been approved. Please contact the Salli administrator if you think this is a mistake.</p><button class="auth-btn" id="salli-signout" type="button">Sign out</button>`}
   else if(offline){body=`<div style="font-size:34px">☁️</div><h2>Connection required</h2><p class="auth-sub">Connect to the internet to sign in or register. Once signed in and approved, Salli can keep your saved data available offline on this device.</p><button class="auth-btn" id="salli-retry" type="button">Try again</button>`}
   app.innerHTML=`<div class="auth-shell"><section class="auth-card"><div class="auth-brand">SALLI</div><p class="auth-sub">Money Manager · Secure personal accounts</p>${body}<p id="salli-auth-message" class="auth-message ${isError?'auth-error':''}">${authSafe(message)}</p><div class="cloud-status">Your financial records are private to your account.</div></section></div>`;
   const form=document.getElementById('salli-auth-form');if(form)form.addEventListener('submit',submitSalliAuth);
   document.getElementById('salli-switch')?.addEventListener('click',()=>authScreen(view==='signup'?'signin':'signup'));
+  document.getElementById('salli-forgot')?.addEventListener('click',sendSalliPasswordReset);
+  document.getElementById('salli-recovery-form')?.addEventListener('submit',submitSalliPasswordRecovery);
   document.getElementById('salli-signout')?.addEventListener('click',()=>salliSignOut());
   document.getElementById('salli-refresh')?.addEventListener('click',()=>loadSalliProfile(true));
   document.getElementById('salli-retry')?.addEventListener('click',()=>startSalliCloud());
 }
 function authMessage(message,error=false){const el=document.getElementById('salli-auth-message');if(el){el.textContent=message;el.className='auth-message'+(error?' auth-error':'')}}
+async function sendSalliPasswordReset(){
+  const email=document.getElementById('salli-email')?.value.trim();
+  if(!email){authMessage('Enter your email address first, then choose Forgot password.',true);return}
+  const b=document.getElementById('salli-forgot');if(b){b.disabled=true;b.textContent='Sending…'}
+  try{const {error}=await cloudClient.auth.resetPasswordForEmail(email,{redirectTo:SUPABASE_REDIRECT_URL});if(error)throw error;authScreen('signin','If an account exists for that email, a password-reset link has been sent. Check your inbox and spam folder.')}
+  catch(e){authMessage(e.message||'Could not send the password-reset email.',true)}
+  finally{const x=document.getElementById('salli-forgot');if(x){x.disabled=false;x.textContent='Forgot password?'}}
+}
+async function submitSalliPasswordRecovery(ev){
+  ev.preventDefault();const p=document.getElementById('salli-new-password').value,p2=document.getElementById('salli-new-password2').value;
+  if(p!==p2){authMessage('The passwords do not match.',true);return}
+  const b=ev.target.querySelector('button[type=submit]');b.disabled=true;b.textContent='Updating…';
+  try{const {error}=await cloudClient.auth.updateUser({password:p});if(error)throw error;authScreen('signin','Your password has been updated. Please sign in with your new password.');await cloudClient.auth.signOut()}
+  catch(e){authMessage(e.message||'Could not update your password.',true)}
+  finally{const x=ev.target.querySelector('button[type=submit]');if(x){x.disabled=false;x.textContent='Update password'}}
+}
+function showFirstProfileSetup(){
+  app.innerHTML=`<div class="auth-shell"><section class="auth-card"><div class="auth-brand">SALLI</div><h2>Complete your profile</h2><p class="auth-sub">Your registration has been approved. Add a few personal details before entering your money manager.</p><form id="salli-profile-form"><label class="auth-field" for="salli-full-name">Full name</label><input class="auth-input" id="salli-full-name" maxlength="100" autocomplete="name" required placeholder="Your full name"><label class="auth-field" for="salli-phone">Phone number (optional)</label><input class="auth-input" id="salli-phone" type="tel" maxlength="30" autocomplete="tel" placeholder="Phone number"><label class="auth-field" for="salli-country">Country (optional)</label><input class="auth-input" id="salli-country" maxlength="80" autocomplete="country-name" placeholder="Country"><button class="auth-btn" type="submit">Save and continue</button></form><p id="salli-profile-message" class="auth-message"></p></section></div>`;
+  document.getElementById('salli-profile-form').addEventListener('submit',async ev=>{
+    ev.preventDefault();const btn=ev.target.querySelector('button[type=submit]');btn.disabled=true;btn.textContent='Saving…';
+    try{const args={p_full_name:document.getElementById('salli-full-name').value.trim(),p_phone:document.getElementById('salli-phone').value.trim()||null,p_country:document.getElementById('salli-country').value.trim()||null};if(!args.p_full_name)throw new Error('Please enter your full name.');const {error}=await cloudClient.rpc('save_my_profile_details',args);if(error)throw error;cloudProfile.full_name=args.p_full_name;cloudProfile.phone=args.p_phone;cloudProfile.country=args.p_country;cloudProfile.profile_completed=true;localStorage.setItem('salli.profile.'+cloudUser.id,JSON.stringify(cloudProfile));await openSalliWorkspace()}
+    catch(e){const m=document.getElementById('salli-profile-message');if(m){m.textContent=e.message||'Could not save profile details.';m.className='auth-message auth-error'}}
+    finally{btn.disabled=false;btn.textContent='Save and continue'}
+  });
+}
 async function submitSalliAuth(ev){
   ev.preventDefault();if(!cloudClient){authMessage('Secure sign-in is unavailable. Check your internet connection and reload.',true);return}
   const email=document.getElementById('salli-email').value.trim(),password=document.getElementById('salli-password').value;
@@ -3040,14 +3070,15 @@ async function submitSalliAuth(ev){
 }
 async function salliSignOut(){cloudReady=false;cloudUser=null;cloudProfile=null;cloudDirty=false;cloudLastRemoteAt=null;try{await cloudClient?.auth.signOut()}catch(e){}KEY=KEY_BASE;S=baseState();UNLOCKED=true;removeCloudAdminButton();authScreen('signin','You have been signed out.')}
 function removeCloudAdminButton(){document.getElementById('salli-admin-fab')?.remove()}
-function addCloudAdminButton(){removeCloudAdminButton();if(cloudProfile?.role==='admin'){const b=document.createElement('button');b.id='salli-admin-fab';b.className='cloud-admin-fab';b.textContent='Admin approvals';b.addEventListener('click',showSalliAdmin);document.body.appendChild(b)}}
+function addCloudAdminButton(){removeCloudAdminButton()}
 async function loadSalliProfile(showPending=false){
   if(!cloudClient)return;const {data:{user},error:se}=await cloudClient.auth.getUser();if(se)throw se;if(!user){authScreen('signin');return}
   cloudUser=user;let prof;
-  for(let i=0;i<4;i++){const {data,error}=await cloudClient.from('profiles').select('user_id,email,role,status,created_at').eq('user_id',user.id).maybeSingle();if(error)throw error;if(data){prof=data;break}await new Promise(r=>setTimeout(r,450))}
+  for(let i=0;i<4;i++){const {data,error}=await cloudClient.from('profiles').select('user_id,email,role,status,created_at,full_name,phone,country,profile_completed').eq('user_id',user.id).maybeSingle();if(error)throw error;if(data){prof=data;break}await new Promise(r=>setTimeout(r,450))}
   if(!prof){authScreen('signin','Your profile is being created. Please sign in again in a moment.',true);return}
   cloudProfile=prof;localStorage.setItem('salli.profile.'+user.id,JSON.stringify(prof));
   if(prof.status!=='approved'){cloudReady=false;removeCloudAdminButton();authScreen(prof.status==='rejected'?'rejected':'pending');return}
+  if(prof.role==='user'&&!prof.profile_completed){showFirstProfileSetup();return}
   await openSalliWorkspace();
 }
 function patchSalliState(data){const b=baseState();if(!data||typeof data!=='object')return b;const out=Object.assign(b,data);out.settings=Object.assign(b.settings,data.settings||{});for(const k in b)if(out[k]===undefined)out[k]=b[k];for(const k in b.settings)if(out.settings[k]===undefined)out.settings[k]=b.settings[k];if(!out.settings.widgets.includes('fds'))out.settings.widgets.splice(Math.max(0,out.settings.widgets.indexOf('accounts')+1),0,'fds');return out}
@@ -3092,9 +3123,9 @@ function showCloudConflict(){
 async function showSalliAdmin(){
   removeCloudAdminButton();app.innerHTML='<div class="auth-shell"><section class="auth-card"><h2>Registration approvals</h2><p class="auth-sub">Loading account requests…</p></section></div>';
   try{
-    const {data,error}=await cloudClient.from('profiles').select('user_id,email,status,role,created_at').order('created_at',{ascending:false});if(error)throw error;
+    const {data,error}=await cloudClient.from('profiles').select('user_id,email,status,role,created_at,full_name,phone,country,profile_completed').order('created_at',{ascending:false});if(error)throw error;
     const rows=(data||[]).filter(x=>x.user_id!==cloudUser.id);
-    app.innerHTML=`<div class="auth-shell" style="align-items:start"><section class="auth-card" style="margin:20px auto"><div class="auth-brand">SALLI ADMIN</div><h2>Registration approvals</h2><p class="auth-sub">Review new accounts. Only approved accounts can access Salli data.</p><button id="salli-admin-back" class="auth-link">← Back to Salli</button><div id="salli-admin-list">${rows.length?rows.map(x=>`<article class="admin-list"><b>${authSafe(x.email||'No email')}</b><div style="font-size:12px;color:var(--muted);margin-top:4px">${authSafe(x.status)} · ${new Date(x.created_at).toLocaleString()}</div>${x.status==='pending'?`<div class="admin-actions"><button class="approve" data-profile-action="approved" data-user="${authSafe(x.user_id)}">Approve</button><button class="reject" data-profile-action="rejected" data-user="${authSafe(x.user_id)}">Reject</button></div>`:x.status==='approved'?`<div class="admin-actions"><button class="reject" data-profile-action="suspended" data-user="${authSafe(x.user_id)}">Suspend</button></div>`:`<div class="admin-actions"><button class="approve" data-profile-action="approved" data-user="${authSafe(x.user_id)}">Approve</button></div>`}</article>`).join(''):'<p class="auth-sub">No other registered users yet.</p>'}</div></section></div>`;
+    app.innerHTML=`<div class="auth-shell" style="align-items:start"><section class="auth-card" style="margin:20px auto"><div class="auth-brand">SALLI ADMIN</div><h2>Registration approvals</h2><p class="auth-sub">Review new accounts. Only approved accounts can access Salli data.</p><button id="salli-admin-back" class="auth-link">← Back to Salli</button><div id="salli-admin-list">${rows.length?rows.map(x=>`<article class="admin-list"><b>${authSafe(x.full_name||x.email||'No email')}</b><div style="font-size:12px;color:var(--muted);margin-top:3px">${authSafe(x.email||'No email')}</div>${x.phone?`<div style="font-size:12px;color:var(--muted);margin-top:3px">Phone: ${authSafe(x.phone)}</div>`:''}${x.country?`<div style="font-size:12px;color:var(--muted);margin-top:3px">Country: ${authSafe(x.country)}</div>`:''}<div style="font-size:12px;color:var(--muted);margin-top:4px">${authSafe(x.status)} · ${new Date(x.created_at).toLocaleString()}</div>${x.status==='pending'?`<div class="admin-actions"><button class="approve" data-profile-action="approved" data-user="${authSafe(x.user_id)}">Approve</button><button class="reject" data-profile-action="rejected" data-user="${authSafe(x.user_id)}">Reject</button></div>`:x.status==='approved'?`<div class="admin-actions"><button class="reject" data-profile-action="suspended" data-user="${authSafe(x.user_id)}">Suspend</button></div>`:`<div class="admin-actions"><button class="approve" data-profile-action="approved" data-user="${authSafe(x.user_id)}">Approve</button></div>`}</article>`).join(''):'<p class="auth-sub">No other registered users yet.</p>'}</div></section></div>`;
     document.getElementById('salli-admin-back').onclick=()=>{app.dataset.scr='';render();addCloudAdminButton()};
     app.querySelectorAll('[data-profile-action]').forEach(btn=>btn.addEventListener('click',async()=>{btn.disabled=true;const {error}=await cloudClient.from('profiles').update({status:btn.dataset.profileAction}).eq('user_id',btn.dataset.user);if(error){alert('Could not update account: '+error.message);btn.disabled=false;return}showSalliAdmin()}));
   }catch(e){app.innerHTML=`<div class="auth-shell"><section class="auth-card"><h2>Admin dashboard unavailable</h2><p class="auth-sub">${authSafe(e.message)}</p><button class="auth-btn" id="salli-admin-back2">Back to Salli</button></section></div>`;document.getElementById('salli-admin-back2').onclick=()=>{render();addCloudAdminButton()}}
@@ -3105,6 +3136,7 @@ async function startSalliCloud(){
   if(!window.supabase?.createClient){authScreen('offline','Could not load the secure sign-in library. Connect to the internet and reload.',true);return}
   try{
     cloudClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,storage:localStorage}});
+    cloudClient.auth.onAuthStateChange((event)=>{if(event==='PASSWORD_RECOVERY')authScreen('recovery')});
     const {data,error}=await cloudClient.auth.getSession();if(error)throw error;
     if(data.session){
       if(!navigator.onLine){const cached=JSON.parse(localStorage.getItem('salli.profile.'+data.session.user.id)||'null');if(cached?.status==='approved'){cloudUser=data.session.user;cloudProfile=cached;KEY=cloudLocalKey(cloudUser.id);S=patchSalliState(load());UNLOCKED=!S.settings.pin;app.dataset.scr='';render();addCloudAdminButton();}else authScreen('offline')}
