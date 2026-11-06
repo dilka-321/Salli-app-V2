@@ -1,13 +1,14 @@
 {
   "name": "salli-money-manager",
-  "version": "1.7.0",
+  "version": "1.9.0",
   "private": true,
   "description": "Salli \u2014 personal money manager (Android build with Capacitor)",
   "scripts": {
     "android:add": "npx cap add android",
-    "android:sync": "npx cap sync android",
+    "android:sync": "node scripts/copy-vendor.js && npx cap sync android",
     "android:open": "npx cap open android",
-    "android:apk": "npx cap sync android && cd android && ./gradlew assembleDebug"
+    "android:apk": "node scripts/copy-vendor.js && npx cap sync android && cd android && ./gradlew assembleDebug",
+    "vendor": "node scripts/copy-vendor.js"
   },
   "dependencies": {
     "@capacitor/android": "6.2.0",
@@ -19,5 +20,17 @@
   },
   "devDependencies": {
     "@capacitor/cli": "6.2.0"
+  },
+  "optionalDependencies": {
+    "@fontsource/dm-sans": "^5.0.0",
+    "@fontsource/inter": "^5.0.0",
+    "@fontsource/lora": "^5.0.0",
+    "@fontsource/manrope": "^5.0.0",
+    "@fontsource/noto-sans-sinhala": "^5.0.0",
+    "@fontsource/noto-sans-tamil": "^5.0.0",
+    "@fontsource/nunito": "^5.0.0",
+    "@fontsource/poppins": "^5.0.0",
+    "@fontsource/roboto": "^5.0.0",
+    "@supabase/supabase-js": "^2.45.4"
   }
 }

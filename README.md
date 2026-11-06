@@ -67,3 +67,21 @@ cd android && ./gradlew assembleDebug
 - Deleting a loan or lending repayment transaction from the transaction list now removes it from the loan/lending, so the balance and Paid/Active status update. Existing repayments whose transaction was already deleted are cleaned up once automatically.
 - Editing a repayment transaction from the transaction list updates the loan/lending as well.
 - Loan → Payment History: each repayment has a ⋮ menu to Edit payment (amount, bank fee, wallet, date, note) or Delete payment (also removes its transaction and bank fee).
+
+## Version 1.9.0
+**Linked records now stay in step (delete in one place → gone from both)**
+- Loans: deleting the loan in the Loans section also removes its "Loan received" transaction, repayments and bank fees. Deleting the "Loan received" transaction from the dashboard removes the loan (the confirmation says so first).
+- Lending: deleting the lending removes its "lending created" transaction and received payments; deleting that transaction from the dashboard removes the lending.
+- Subscriptions: deleting a subscription payment from the transaction list removes it from the subscription's Payment History (and puts the next payment date back). Each payment in Payment History now has a ⋮ menu with **Edit payment** and **Delete payment**. Payments whose transaction was already deleted are cleaned up once automatically.
+- Editing a loan received / lending / subscription transaction from the transaction list updates the linked record.
+
+**Loan overdue**
+- When a loan instalment date has passed, the loan shows an **OVERDUE** badge (detail and Loans list), the overdue instalments are marked in the schedule, and the button becomes **PAY NOW - OVERDUE**.
+
+**Offline**
+- The sign-in library and all app fonts are bundled into the app at build time (`scripts/copy-vendor.js`, run by both GitHub workflows), so the APK and the website open without internet.
+- With no internet, Salli opens the last signed-in account from the data saved on the phone; changes sync automatically when the connection returns.
+- The website's offline cache (`sw.js`) also keeps the stylesheet, bundled files and Google Fonts.
+
+**Premium look** (`www/premium.css`, styling only)
+- Soft aurora background, light-edged cards with depth, glossy buttons with press feedback, frosted top/bottom bars, smooth screen and list entrance animations, tabular numbers. Works with dark/light mode and every accent colour; animations switch off when the phone's "reduce motion" setting is on.

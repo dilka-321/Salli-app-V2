@@ -1,10 +1,12 @@
-const CACHE_NAME = 'salli-shell-v3';
-const SHELL = ['./', './index.html', './manifest.webmanifest', './icons/salli.svg'];
+const CACHE_NAME = 'salli-shell-v4';
+const SHELL = ['./', './index.html', './manifest.webmanifest', './icons/salli.svg', './premium.css'];
+const OPTIONAL = ['./vendor/supabase.js', './vendor/fonts/fonts.css'];
 const SUPABASE_SDK = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
 self.addEventListener('install', event => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE_NAME);
     await cache.addAll(SHELL);
+    for (const u of OPTIONAL) { try { await cache.add(u); } catch (_) { /* not bundled in this build */ } }
     try { await cache.add(SUPABASE_SDK); } catch (_) { /* online login needs SDK; retry on next visit */ }
     await self.skipWaiting();
   })());
@@ -23,6 +25,15 @@ self.addEventListener('fetch', event => {
       try { const fresh = await fetch(req); if (fresh.ok) cache.put(req, fresh.clone()); return fresh; }
       catch (_) { if (cached) return cached; throw _; }
     })());
+    return;
+  }
+  // Google Fonts: keep a copy so the chosen font still shows offline
+  if (url.origin === 'https://fonts.googleapis.com' || url.origin === 'https://fonts.gstatic.com') {
+    event.respondWith(caches.open(CACHE_NAME).then(async cache => {
+      const cached = await cache.match(req);
+      const fresh = fetch(req).then(res => { if (res && (res.ok || res.type === 'opaque')) cache.put(req, res.clone()); return res; }).catch(() => cached);
+      return cached || fresh;
+    }));
     return;
   }
   if (url.origin !== self.location.origin) return;

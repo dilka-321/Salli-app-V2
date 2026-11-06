@@ -1,0 +1,110 @@
+/* =====================================================================
+   Salli — Premium visual layer (v1.9.0)
+   Pure styling: no layout or behaviour changes. Loaded after the app's
+   own styles, works in dark + light mode, with every accent colour,
+   and respects "reduce motion".
+   ===================================================================== */
+
+:root{
+  --pm-ease:cubic-bezier(.22,1,.36,1);
+  --pm-spring:cubic-bezier(.34,1.56,.64,1);
+  --pm-aura1:color-mix(in srgb,var(--accent) 22%,transparent);
+  --pm-aura2:color-mix(in srgb,#5B7CFF 14%,transparent);
+  --pm-edge:linear-gradient(160deg,rgba(255,255,255,.16),rgba(255,255,255,.02) 40%,rgba(255,255,255,0) 60%,rgba(255,255,255,.07));
+  --pm-card-shadow:0 1px 0 rgba(255,255,255,.04) inset,0 18px 40px -26px rgba(0,0,0,.75);
+  --pm-hero-shadow:0 26px 60px -30px color-mix(in srgb,var(--accent) 55%,#000);
+  --pm-bar:color-mix(in srgb,var(--bg) 78%,transparent);
+}
+@media (prefers-color-scheme: light){:root:not([data-theme="dark"]){
+  --pm-aura1:color-mix(in srgb,var(--accent) 16%,transparent);
+  --pm-aura2:color-mix(in srgb,#5B7CFF 9%,transparent);
+  --pm-edge:linear-gradient(160deg,rgba(255,255,255,.95),rgba(255,255,255,.4) 45%,rgba(0,0,0,.03));
+  --pm-card-shadow:0 1px 0 rgba(255,255,255,.9) inset,0 14px 34px -22px rgba(22,32,42,.28);
+  --pm-hero-shadow:0 24px 50px -28px color-mix(in srgb,var(--accent) 60%,#16202A);
+  --pm-bar:color-mix(in srgb,var(--bg) 82%,transparent);
+}}
+[data-theme="light"]{
+  --pm-aura1:color-mix(in srgb,var(--accent) 16%,transparent);
+  --pm-aura2:color-mix(in srgb,#5B7CFF 9%,transparent);
+  --pm-edge:linear-gradient(160deg,rgba(255,255,255,.95),rgba(255,255,255,.4) 45%,rgba(0,0,0,.03));
+  --pm-card-shadow:0 1px 0 rgba(255,255,255,.9) inset,0 14px 34px -22px rgba(22,32,42,.28);
+  --pm-hero-shadow:0 24px 50px -28px color-mix(in srgb,var(--accent) 60%,#16202A);
+  --pm-bar:color-mix(in srgb,var(--bg) 82%,transparent);
+}
+
+/* ---------- ambient background: soft aurora behind every screen ---------- */
+body{background:var(--bg);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility}
+body::before{content:"";position:fixed;inset:-20vh -20vw auto;height:80vh;z-index:-1;pointer-events:none;
+  background:radial-gradient(40vmax 30vmax at 15% 10%,var(--pm-aura1),transparent 70%),radial-gradient(36vmax 28vmax at 90% 0%,var(--pm-aura2),transparent 70%);
+  filter:blur(8px)}
+#app{position:relative;z-index:0}
+
+/* ---------- numbers & type ---------- */
+.num,.big,.v{font-variant-numeric:tabular-nums lining-nums;font-feature-settings:"tnum" 1,"lnum" 1}
+.big{letter-spacing:-.025em}
+.h2{letter-spacing:-.01em}
+.top h1{letter-spacing:-.015em}
+
+/* ---------- cards: hairline light edge + soft depth ---------- */
+.card{position:relative;box-shadow:var(--pm-card-shadow);transition:transform .22s var(--pm-ease),box-shadow .22s var(--pm-ease),background-color .2s}
+.card::before{content:"";position:absolute;inset:0;border-radius:inherit;padding:1px;pointer-events:none;background:var(--pm-edge);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;opacity:.9}
+.card.click:active,button.card:active{transform:scale(.985)}
+.card.glow{box-shadow:var(--pm-hero-shadow),var(--pm-card-shadow);
+  background:radial-gradient(120% 140% at 100% 0%,color-mix(in srgb,var(--accent) 16%,transparent),transparent 55%),var(--card)}
+
+/* ---------- buttons: subtle sheen and tactile press ---------- */
+.btn{position:relative;overflow:hidden;transition:transform .16s var(--pm-ease),box-shadow .2s,filter .2s;letter-spacing:.01em}
+.btn:not(.out):not(.ghost)::after{content:"";position:absolute;inset:0;pointer-events:none;border-radius:inherit;
+  background:linear-gradient(180deg,rgba(255,255,255,.22),rgba(255,255,255,0) 52%)}
+.btn:active{transform:scale(.97);filter:brightness(.96)}
+.btn:not(.out):not(.ghost):not(.red):not(.blue):not(.overdue){box-shadow:0 14px 28px -16px color-mix(in srgb,var(--accent) 85%,transparent)}
+.ib{transition:transform .15s var(--pm-ease),background-color .15s}
+.ib:active{transform:scale(.9)}
+.chip{transition:background-color .2s,color .2s,transform .15s var(--pm-ease),box-shadow .2s}
+.chip:active{transform:scale(.95)}
+.chip.on{box-shadow:0 8px 18px -12px color-mix(in srgb,var(--accent) 90%,transparent)}
+
+/* overdue repayment button (Loans) */
+.btn.overdue{background:linear-gradient(180deg,#FFC2BC,#F7A79E);color:#5A1410;text-transform:uppercase;letter-spacing:.04em;
+  box-shadow:0 14px 30px -16px rgba(217,68,58,.9),0 0 0 1px rgba(217,68,58,.25) inset;animation:pmPulse 2.4s ease-in-out infinite}
+.btn.overdue svg{color:#5A1410}
+@keyframes pmPulse{0%,100%{box-shadow:0 14px 30px -16px rgba(217,68,58,.9),0 0 0 1px rgba(217,68,58,.25) inset}50%{box-shadow:0 14px 34px -12px rgba(217,68,58,1),0 0 0 4px rgba(247,167,158,.25)}}
+.kv.od span:first-child{color:var(--red)}
+
+/* ---------- top bar & bottom bars: frosted ---------- */
+.top{background:var(--pm-bar);-webkit-backdrop-filter:saturate(1.6) blur(18px);backdrop-filter:saturate(1.6) blur(18px)}
+.nav,.bottombar{background:var(--pm-bar);-webkit-backdrop-filter:saturate(1.6) blur(20px);backdrop-filter:saturate(1.6) blur(20px);
+  box-shadow:0 -12px 30px -22px rgba(0,0,0,.6)}
+.nb{transition:color .2s}
+.nb svg{transition:transform .25s var(--pm-spring)}
+.nb.on svg{transform:translateY(-1px) scale(1.08)}
+.navfab{transition:transform .25s var(--pm-spring),box-shadow .25s}
+.navfab:active{transform:scale(.9) rotate(90deg)}
+
+/* ---------- motion: screens, sheets, dialogs, toasts ---------- */
+.screen{animation:pmScreenIn .38s var(--pm-ease) both}
+@keyframes pmScreenIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.screen>.pad>*:nth-child(-n+8){animation:pmRise .5s var(--pm-ease) both}
+.screen>.pad>*:nth-child(2){animation-delay:.03s}.screen>.pad>*:nth-child(3){animation-delay:.06s}.screen>.pad>*:nth-child(4){animation-delay:.09s}
+.screen>.pad>*:nth-child(5){animation-delay:.12s}.screen>.pad>*:nth-child(6){animation-delay:.15s}.screen>.pad>*:nth-child(7){animation-delay:.18s}.screen>.pad>*:nth-child(8){animation-delay:.21s}
+@keyframes pmRise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.sheet{animation-timing-function:var(--pm-ease)!important;box-shadow:0 -24px 60px -20px rgba(0,0,0,.55)}
+.scrim{-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px)}
+.toast{-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}
+
+/* ---------- icons in tiles: soft inner light ---------- */
+.ic{box-shadow:inset 0 1px 0 rgba(255,255,255,.12)}
+
+/* ---------- inputs: clear focus ring ---------- */
+input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 35%,transparent)}
+button:focus-visible{outline:2px solid color-mix(in srgb,var(--accent) 70%,transparent);outline-offset:2px}
+
+/* ---------- scrollbars (web) ---------- */
+*{scrollbar-width:thin;scrollbar-color:color-mix(in srgb,var(--fg) 18%,transparent) transparent}
+
+/* ---------- respect "reduce motion" ---------- */
+@media (prefers-reduced-motion: reduce){
+  .screen,.screen>.pad>*,.btn.overdue{animation:none!important}
+  .card,.btn,.chip,.ib,.navfab,.nb svg{transition:none!important}
+}
