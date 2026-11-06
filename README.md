@@ -60,3 +60,10 @@ cd android && ./gradlew assembleDebug
 - Android hardware Back from Admin approvals returns to the open side menu; subsequent Back closes the menu, then navigates the existing page stack before offering Exit at the home screen.
 - Shows a secure session-loading screen at startup to prevent a sign-in flash before restoring an existing session.
 - Rechecks online exchange rates when the cached fetch is older than six hours and when the app returns online/foreground. The provider itself publishes rates on its own update schedule; manual rates still take priority.
+
+
+## Version 1.8.3 additive features and loan ledger fix
+- Adds a Fixed Deposits shortcut page and a direct add action while retaining the existing My Assets workflow and all existing asset features.
+- Adds Edit repayment on each loan payment-history entry; updates the linked expense transaction, repayment ledger and associated bank fee.
+- Deleting a loan repayment transaction now also removes its linked loan payment record and linked bank-fee transaction so loan status/balance recalculate correctly.
+- No database migration is required.

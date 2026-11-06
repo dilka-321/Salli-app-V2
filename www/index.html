@@ -617,7 +617,7 @@ button,input,select,textarea{font-family:inherit}
 /* =================================================================
    Salli Money Manager — core: helpers, currencies, state, derived data
    ================================================================= */
-const APP_NAME='Salli', APP_VER='1.8.2';
+const APP_NAME='Salli', APP_VER='1.8.3';
 let KEY='salli.mm.v2';
 const KEY_BASE='salli.mm.v2';
 const NATIVE=!!(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform());
@@ -1094,7 +1094,7 @@ function drawerHTML(){
   <button class="smscard" data-a="dgo" data-n="smsSetup"><span class="ic purple">${ic('sparkle')}</span><span class="grow"><b>SMS Automation</b><small>Auto-track expenses from SMS</small></span>${ic('chevR')}</button>
   <div class="dsec">${T('FINANCE')}</div>${it('accounts','My Accounts','wallet','green')}${it('overview','Financial Overview','trend','blue')}${it('cards','Credit Cards','card','purple')}${it('transfers','Transfers','swap','orange')}${it('smsDrafts','SMS Drafts','sms','green')}${it('smsParser','SMS Parser','scan','blue')}
   <div class="dsec o">${T('PLANNING')}</div>${it('plans','Monthly Plan','plan','green')}${it('splans','Spending Plan','budget','blue')}${it('ot','OT & Salary','salary','green')}${it('subs','Subscriptions','sub','orange')}${it('recurring','Recurring Expenses','repeat','orange')}
-  <div class="dsec r">${T('LOANS & ASSETS')}</div>${it('loans','Loans','bank','red')}${it('analyzer','Loan Analyzer','analyze','red')}${it('lendings','Lendings','hand','orange')}${it('assets','My Assets','asset','green')}${it('installments','Installments','inst','blue')}
+  <div class="dsec r">${T('LOANS & ASSETS')}</div>${it('loans','Loans','bank','red')}${it('analyzer','Loan Analyzer','analyze','red')}${it('lendings','Lendings','hand','orange')}${it('assets','My Assets','asset','green')}${it('installments','Installments','inst','blue')}${it('fixedDeposits','Fixed Deposits','receipt','green')}
   <div class="dsec b">${T('PRODUCTIVITY')}</div>${it('goals','Goals','goal','green')}${it('todos','To-Do List','todo','blue')}${it('priorities','Priority Board','prio','purple')}
   <div class="dsec p">${T('SETTINGS')}</div>${it('categories','Categories','cat','purple')}${it('tags','Tags','tag','purple')}${it('acctSetup','Account Setup','setup','blue')}${it('dashboard','Customize Dashboard','dash','green')}${it('backup','Backup & Restore','cloud','green')}${it('settings','Settings','gear','blue')}${cloudProfile?.role==='admin'?`<div class="dsec">ADMINISTRATION</div><button class="ditem" data-a="adminapprovals"><span class="ic blue">${ic('user')}</span>Admin approvals</button>`:''}
   <p class="small faint" style="text-align:center;margin:18px 0 0">Version ${APP_VER}</p></aside>`;
@@ -1442,7 +1442,7 @@ A.qesave=()=>{const st=topSheet().st;const v=parseFloat(st.amount);if(!(v>0)){st
   if(t.pair){const o=S.txns.find(x=>x.id===t.pair);if(o){o.date=st.date;o.time=st.time;o.note=st.note;o.amount=round2(o.amount*v/old)}}
   closeSheet();commit('Transaction updated')};
 A.txedit=el=>{const t=S.txns.find(x=>x.id===el.dataset.id);if(!['normal','recurring','sub','inst'].includes(t.kind||'normal')){txQuickEdit(t);return}U.edit={...t,tags:[...(t.tags||[])]};go('txEdit',{})};
-A.txdel=el=>{const id=el.dataset.id;confirmDel('Delete transaction?','This removes it and updates your account balance.',()=>{const t=S.txns.find(x=>x.id===id);S.txns=S.txns.filter(x=>x.id!==id&&!(t&&t.pair&&x.id===t.pair));back();commit('Transaction deleted')})};
+A.txdel=el=>{const id=el.dataset.id;confirmDel('Delete transaction?','This removes it and updates your account balance. If it is a loan repayment, the loan balance and payment history will also be updated.',()=>{const t=S.txns.find(x=>x.id===id);if(t&&t.kind==='loan_pay'){S.loans.forEach(l=>{l.payments=(l.payments||[]).filter(p=>p.txId!==id)})}S.txns=S.txns.filter(x=>x.id!==id&&!(t&&t.pair&&x.id===t.pair)&&!(x.kind==='bank_fee'&&x.link?.loanPayment===id));back();commit('Transaction deleted')})};
 SCR.txEdit=()=>{
   const e=U.edit;if(!e)return SCR.home();const isNew=!S.txns.some(x=>x.id===e.id);const inc=e.type==='income';
   const recent=[...new Set(S.txns.filter(t=>t.type===e.type&&t.catId).slice(-60).reverse().map(t=>t.catId))].filter(id=>cat(id)&&id!==e.catId).slice(0,3);
@@ -2038,7 +2038,7 @@ SCR.loan=p=>{const l=S.loans.find(x=>x.id===p.id);if(!l)return SCR.loans();const
    <div class="g2"><div class="card"><span class="ic green">${ic('money')}</span><div class="tiny muted" style="margin-top:8px">Amount Paid</div><b class="green num">${M(paid)}</b></div><div class="card"><span class="ic blue">${ic('trend')}</span><div class="tiny muted" style="margin-top:8px">${hasT?'Monthly EMI':'Tenure'}</div><b class="num">${hasT?M(e):'Not set'}</b></div></div>
    <div class="card"><b class="row">${ic('info')} Loan Information</b>${[['Lender',l.lender||'—'],['Currency',c+' — '+(CURM[c]?.name||'')],['Original Amount',M(l.principal)],['Interest Rate',(l.rate||0)+'% per year'],...(hasT?[['Tenure',l.months+' months'],['Total Payable',M(tot)],['Total Interest',M(tot-l.principal)],['First Instalment',fD(l.start)],['Instalments Paid',`${nPaid} of ${l.months}`]]:[['Start date',fD(l.start)]])].map(([a,b])=>`<div class="kv"><span>${a}</span><b>${b}</b></div>`).join('')}</div>
    ${r>0&&rows[nPaid]?`<div class="card"><b>Upcoming schedule</b>${rows.slice(nPaid,nPaid+6).map(x=>`<div class="kv"><span>#${x.k} · ${fD(x.d)}<div class="tiny muted">Interest ${M(x.it)} · Principal ${M(x.pr)}</div></span><b class="num">${M(e)}</b></div>`).join('')}</div>`:''}
-   <span class="h2">Payment History</span>${l.payments.length?`<div class="card">${l.payments.slice().reverse().map(x=>`<div class="kv"><span>${fD(x.date)}${x.note?`<div class="tiny muted">${esc(x.note)}</div>`:''}${x.payCur&&x.payCur!==c?`<div class="tiny muted">Paid ${money(x.paid,x.payCur)} at 1 ${x.payCur} = ${(+x.rate).toFixed(4)} ${c}</div>`:''}</span><b class="num green">${M(x.amount)}${x.fee?`<div class="tiny red">+ fee ${money(x.fee,x.payCur||c)}</div>`:''}</b></div>`).join('')}</div>`:`<div class="card small muted">No payments yet.</div>`}</div>`,
+   <span class="h2">Payment History</span>${l.payments.length?`<div class="card">${l.payments.slice().reverse().map(x=>`<div class="kv"><span>${fD(x.date)}${x.note?`<div class="tiny muted">${esc(x.note)}</div>`:''}${x.payCur&&x.payCur!==c?`<div class="tiny muted">Paid ${money(x.paid,x.payCur)} at 1 ${x.payCur} = ${(+x.rate).toFixed(4)} ${c}</div>`:''}</span><span style="text-align:right"><b class="num green">${M(x.amount)}${x.fee?`<div class="tiny red">+ fee ${money(x.fee,x.payCur||c)}</div>`:''}</b><button class="link" data-a="loanpayedit" data-id="${l.id}" data-payment="${x.id}">Edit repayment</button></span></div>`).join('')}</div>`:`<div class="card small muted">No payments yet.</div>`}</div>`,
    bottom:r>0?`<div class="bottombar pad"><div><button class="btn w" data-a="loanpay" data-id="${l.id}">${ic('card')} Pay now</button></div></div>`:'',fab:false};
 };
 A.loanmenu=el=>{const id=el.dataset.id;openMenu(el,[{l:'Edit loan',i:'edit',a:()=>loanForm(id)},{l:'Delete loan',i:'trash',red:true,a:()=>confirmDel('Delete loan?','The loan and its payment history are removed. Recorded transactions stay.',()=>{S.loans=S.loans.filter(x=>x.id!==id);back();commit('Loan deleted')})}])};
@@ -2061,8 +2061,34 @@ A.lpf=el=>{topSheet().st[el.dataset.k]=el.value};
 A.lpacc=el=>{const st=topSheet().st;st.accId=el.dataset.id;const ac=accCur(st.accId),v=parseFloat(st.amt);if(ac!==st.cur){if(v>0)st.amt=String(round2(conv(v,st.cur,ac)));st.cur=ac}rs()};
 A.lpok=()=>{const st=topSheet().st;const l=S.loans.find(x=>x.id===st.id);const c=lcur(l);const v=parseFloat(st.amt),fee=parseFloat(st.fee)||0;if(!(v>0)){st.err='Enter an amount above zero.';rs();return}if(!st.accId){st.err='Choose a wallet.';rs();return}
   const ac=accCur(st.accId);const t1={id:uid(),type:'expense',kind:'loan_pay',who:l.name,accId:st.accId,amount:round2(conv(v,st.cur,ac)),date:st.date,time:nowTime(),note:st.note,tags:[]};S.txns.push(t1);
-  if(fee)S.txns.push({id:uid(),type:'expense',kind:'bank_fee',who:l.name,catId:S.categories.find(x=>x.name==='Bank Charges')?.id,accId:st.accId,amount:round2(conv(fee,st.cur,ac)),date:st.date,time:nowTime(),note:'Bank fee for loan payment',tags:[]});
+  if(fee)S.txns.push({id:uid(),type:'expense',kind:'bank_fee',who:l.name,catId:S.categories.find(x=>x.name==='Bank Charges')?.id,accId:st.accId,amount:round2(conv(fee,st.cur,ac)),date:st.date,time:nowTime(),note:'Bank fee for loan payment',tags:[],link:{loanPayment:t1.id}});
   l.payments.push({id:uid(),amount:round2(conv(v,st.cur,c)),paid:v,payCur:st.cur,rate:rateOf(st.cur,c),fee,date:st.date,accId:st.accId,note:st.note,txId:t1.id});closeSheet();commit(loanRemain(l)<=0?'Loan fully paid':'Payment recorded')};
+
+A.loanpayedit=el=>{const l=S.loans.find(x=>x.id===el.dataset.id);const p=l&&l.payments.find(x=>x.id===el.dataset.payment);if(!l||!p)return;
+  const tx=S.txns.find(t=>t.id===p.txId);if(!tx){toast('The linked transaction is missing. Delete this repayment and record it again if needed.',true);return}
+  const c=lcur(l);
+  openSheet(st=>`<h3 class="sec">Edit loan repayment</h3><div class="tiny muted">${esc(l.name)}</div>${settleBox(st,c)}
+    <div class="fld"><label>Bank fee (${st.cur})</label><input inputmode="decimal" value="${esc(st.fee)}" data-in="lpef" data-k="fee"></div>
+    <div class="fld"><label>Pay from wallet</label>${walletCards(st.accId,'lpeacc')}</div>
+    <div class="fld"><label>Payment date</label><input type="date" value="${st.date}" data-ch="lpef" data-k="date"></div>
+    <div class="fld"><label>Note</label><input value="${esc(st.note)}" data-in="lpef" data-k="note"></div>
+    ${st.err?`<span class="err">${st.err}</span>`:''}<div class="btns"><button class="btn out" data-a="close">Cancel</button><button class="btn" data-a="lpesave">Save changes</button></div>`,
+    {loanId:l.id,paymentId:p.id,txId:p.txId,cur:p.payCur||c,amt:String(p.paid??p.amount),fee:String(p.fee||''),accId:p.accId||tx.accId,date:p.date||tx.date,note:p.note||tx.note||''},{full:true});
+};
+A.lpef=el=>{topSheet().st[el.dataset.k]=el.value;topSheet().st.err=''};
+A.lpeacc=el=>{const st=topSheet().st;st.accId=el.dataset.id;const ac=accCur(st.accId),v=parseFloat(st.amt);if(ac!==st.cur&&v>0)st.amt=String(round2(conv(v,st.cur,ac)));st.cur=ac;rs()};
+A.lpesave=()=>{const st=topSheet().st,l=S.loans.find(x=>x.id===st.loanId),p=l&&l.payments.find(x=>x.id===st.paymentId),tx=S.txns.find(x=>x.id===st.txId);
+  const v=parseFloat(st.amt),fee=parseFloat(st.fee)||0;if(!l||!p||!tx){st.err='The repayment record could not be found.';rs();return}
+  if(!(v>0)){st.err='Enter an amount above zero.';rs();return}if(!st.accId){st.err='Choose a wallet.';rs();return}
+  const c=lcur(l),ac=accCur(st.accId),loanAmount=round2(conv(v,st.cur,c)),oldPayDate=p.date,oldPayAcc=p.accId;
+  tx.amount=round2(conv(v,st.cur,ac));tx.accId=st.accId;tx.date=st.date;tx.note=st.note;tx.who=l.name;tx.kind='loan_pay';tx.type='expense';
+  p.amount=loanAmount;p.paid=v;p.payCur=st.cur;p.rate=rateOf(st.cur,c);p.fee=fee;p.date=st.date;p.accId=st.accId;p.note=st.note;
+  let feeTx=S.txns.find(x=>x.kind==='bank_fee'&&x.link?.loanPayment===tx.id);
+  if(!feeTx&&fee>0)feeTx=S.txns.find(x=>x.kind==='bank_fee'&&x.who===l.name&&x.accId===(oldPayAcc||st.accId)&&x.date===(oldPayDate||st.date)&&String(x.note||'').includes('loan payment'));
+  if(fee>0){if(!feeTx){feeTx={id:uid(),type:'expense',kind:'bank_fee',who:l.name,catId:S.categories.find(x=>x.name==='Bank Charges')?.id,accId:st.accId,amount:0,date:st.date,time:nowTime(),note:'Bank fee for loan payment',tags:[],link:{loanPayment:tx.id}};S.txns.push(feeTx)}feeTx.amount=round2(conv(fee,st.cur,ac));feeTx.accId=st.accId;feeTx.date=st.date;feeTx.link={...(feeTx.link||{}),loanPayment:tx.id}}
+  else if(feeTx)S.txns=S.txns.filter(x=>x.id!==feeTx.id);
+  closeSheet();commit('Loan repayment updated');
+};
 
 /* ---------------- Loan analyzer ---------------- */
 SCR.analyzer=()=>{const z=U.la=U.la||{P:'1000000',r:'14',n:'60',inc:'',extra:''};const P=+z.P||0,r=+z.r||0,n=+z.n||0;
@@ -2137,6 +2163,10 @@ function runFDInterest(){let n=0;const ic0=S.categories.find(c=>c.kind==='income
     const post=(key,d,amt)=>{if(f.posted.includes(key)||d>today())return;S.txns.push({id:uid(),type:'income',kind:'normal',catId:ic0?.id,accId:to.id,amount:round2(conv(amt,f.currency,to.currency)),date:d,time:'09:00:00',note:'FD interest — '+a.name,tags:['FD'],link:{fd:a.id}});f.posted.push(key);n++};
     if(f.payout==='maturity')post('M',fdMaturity(a),fdMonthly(a)*m);else for(let k=1;k<=m;k++)post(k,addMonths(f.start,k),fdMonthly(a))});
   if(n)save();return n}
+SCR.fixedDeposits=()=>{const L=S.assets.filter(isFD);const total=sum(L,assetBase);
+  return {top:hdr('Fixed Deposits',{right:rbtn('go','wallet','data-n="assets"','All assets')}),html:`<div class="pad stack"><div class="card glow"><span class="small muted">Total fixed deposits</span><div class="big green num">${B(total)}</div><div class="tiny muted">${L.length} deposit${L.length===1?'':'s'}</div></div>${L.map(a=>`<div class="card row"><span class="grow" style="min-width:0"><b>${esc(a.name)}</b><div class="tiny muted">${(+a.fd.rate).toFixed(2)}% ${a.fd.basis==='monthly'?'monthly':'yearly'} · matures ${fD(fdMaturity(a))}</div><div class="tiny green">Interest ${a.fd.payout==='maturity'?'at maturity':'monthly'} → ${esc(accName(a.fd.accId))}</div></span><span style="text-align:right"><b class="num">${money(a.value,a.fd.currency)}</b><button class="link" data-a="assetmenu" data-id="${a.id}">Options</button></span></div>`).join('')||emptyState('receipt','No fixed deposits yet','Add a fixed deposit to track interest and maturity') }</div>`,fab:fabBtn('fdnew',true)};
+};
+A.fdnew=()=>{const t=S.assetTypes.find(x=>x.fd)||S.assetTypes.find(x=>x.name==='Fixed Deposit');if(!t){toast('Fixed Deposit asset type is unavailable. Check Account Setup.',true);return}assetForm(null);topSheet().st.typeId=t.id;rs()};
 SCR.assets=()=>{const tot=sum(S.assets,assetBase);const g={};S.assets.forEach(a=>(g[a.typeId]=g[a.typeId]||[]).push(a));
   const row=a=>{const f=a.fd;return `<div class="card row"><span class="ic green" style="font-size:calc(22px*var(--fs))">${atype(a.typeId)?.icon||'💼'}</span><span class="grow" style="min-width:0"><b>${esc(a.name)}</b>${f?`<div class="tiny muted">${(+f.rate).toFixed(2)}% ${f.basis==='monthly'?'monthly':'yearly'} · matures ${fD(fdMaturity(a))}</div><div class="tiny green">Interest ${f.payout==='maturity'?'at maturity':'monthly'} → ${esc(accName(f.accId))}${fdNext(a)?' · next '+fD(fdNext(a)):''}</div>`:''}${a.note?`<div class="tiny muted">${esc(a.note)}</div>`:''}</span><span style="text-align:right"><b class="num">${f?money(a.value,f.currency):B(a.value)}</b>${f&&f.currency!==S.settings.base?`<div class="tiny muted num">≈ ${B(assetBase(a))}</div>`:''}</span><button class="ib" data-a="assetmenu" data-id="${a.id}" aria-label="Options">${ic('more')}</button></div>`};
   return {top:hdr(T('My Assets'),{right:rbtn('go','setup','data-n="acctSetup"','Asset types')}),html:`<div class="pad stack"><div class="card glow"><span class="small muted">Total asset value</span><div class="big green num">${B(tot)}</div><div class="tiny muted">Plus ${B(totalBal())} in your accounts</div></div>
@@ -3098,6 +3128,11 @@ async function openSalliWorkspace(){
   }else if(local){S=patchSalliState(local);cloudDirty=!!meta.dirty;cloudLastRemoteAt=remote?.updated_at||null}
   else if(remote){S=patchSalliState(remote.data);cloudDirty=false;cloudLastRemoteAt=remote.updated_at}
   else{S=baseState();cloudDirty=true;cloudLastRemoteAt=null}
+  // Reconcile loan ledgers against their linked transactions. This also repairs
+  // repayments deleted from the transaction list before this version was installed.
+  let loanLedgerRepaired=false;
+  S.loans.forEach(l=>{const before=(l.payments||[]).length;l.payments=(l.payments||[]).filter(p=>!p.txId||S.txns.some(t=>t.id===p.txId));if(l.payments.length!==before)loanLedgerRepaired=true});
+  if(loanLedgerRepaired)cloudDirty=true;
   if(cloudProfile){S.settings.name=cloudProfile.full_name||S.settings.name||'';S.settings.email=cloudUser?.email||cloudProfile.email||S.settings.email||'';S.settings.phone=cloudProfile.phone||S.settings.phone||'';S.settings.country=cloudProfile.country||S.settings.country||''}
   UNLOCKED=!S.settings.pin;cloudReady=true;localStorage.setItem(KEY,JSON.stringify(S));
   if(!meta.lastSyncedRemoteAt&&remote&&!meta.dirty){meta.lastSyncedRemoteAt=remote.updated_at;meta.dirty=false;localStorage.setItem(cloudMetaKey(),JSON.stringify(meta))}
