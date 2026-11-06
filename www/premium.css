@@ -34,7 +34,7 @@
 
 /* ---------- ambient background: soft aurora behind every screen ---------- */
 body{background:var(--bg);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility}
-body::before{content:"";position:fixed;inset:-20vh -20vw auto;height:80vh;z-index:-1;pointer-events:none;
+#app::before{content:"";position:fixed;inset:-20vh -20vw auto;height:80vh;z-index:-1;pointer-events:none;
   background:radial-gradient(40vmax 30vmax at 15% 10%,var(--pm-aura1),transparent 70%),radial-gradient(36vmax 28vmax at 90% 0%,var(--pm-aura2),transparent 70%);
   filter:blur(8px)}
 #app{position:relative;z-index:0}
@@ -107,4 +107,18 @@ button:focus-visible{outline:2px solid color-mix(in srgb,var(--accent) 70%,trans
 @media (prefers-reduced-motion: reduce){
   .screen,.screen>.pad>*,.btn.overdue{animation:none!important}
   .card,.btn,.chip,.ib,.navfab,.nb svg{transition:none!important}
+}
+
+/* ---------- Dark mode = true black (OLED) ---------- */
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#000; --card:rgba(255,255,255,.065); --card2:rgba(255,255,255,.09); --field:rgba(255,255,255,.06); --line:rgba(255,255,255,.09);
+  --bar:rgba(0,0,0,.78); --sheet:rgba(14,14,16,.94); --pop:rgba(22,22,24,.96); --pm-bar:rgba(0,0,0,.8);
+  --glass-grad:linear-gradient(150deg,rgba(255,255,255,.07),rgba(255,255,255,.02) 60%);
+  --pm-aura1:transparent; --pm-aura2:transparent;
+}}
+[data-theme="dark"]{
+  --bg:#000; --card:rgba(255,255,255,.065); --card2:rgba(255,255,255,.09); --field:rgba(255,255,255,.06); --line:rgba(255,255,255,.09);
+  --bar:rgba(0,0,0,.78); --sheet:rgba(14,14,16,.94); --pop:rgba(22,22,24,.96); --pm-bar:rgba(0,0,0,.8);
+  --glass-grad:linear-gradient(150deg,rgba(255,255,255,.07),rgba(255,255,255,.02) 60%);
+  --pm-aura1:transparent; --pm-aura2:transparent;
 }

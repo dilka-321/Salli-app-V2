@@ -85,3 +85,14 @@ cd android && ./gradlew assembleDebug
 
 **Premium look** (`www/premium.css`, styling only)
 - Soft aurora background, light-edged cards with depth, glossy buttons with press feedback, frosted top/bottom bars, smooth screen and list entrance animations, tabular numbers. Works with dark/light mode and every accent colour; animations switch off when the phone's "reduce motion" setting is on.
+
+## Version 1.9.1
+**Everything linked now updates everywhere**
+- Edit Loan (name / amount / currency) updates its "Loan received" transaction in the dashboard list; editing that transaction updates the loan.
+- Lending: new **Edit lending** in the ⋮ menu (name, amount, currency, account, due date, note) — updates its transaction. Editing the transaction updates the lending.
+- Lending received payments: ⋮ → **Edit payment** (amount, account, date, note) — updates its transaction, and the other way round.
+- Subscription, installment and recurring payments edited in the full transaction editor now update their subscription / plan / recurring payment. Deleting a recurring payment's transaction removes it and puts the due date back.
+- Savings-goal deposits/withdrawals stay in step with their transaction (new entries).
+- Editing a linked transaction no longer drops its loan / lending / FD link.
+
+**Dark mode is true black** (#000 background, dark-grey glass cards).

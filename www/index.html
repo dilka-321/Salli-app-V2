@@ -621,7 +621,7 @@ button,input,select,textarea{font-family:inherit}
 /* =================================================================
    Salli Money Manager — core: helpers, currencies, state, derived data
    ================================================================= */
-const APP_NAME='Salli', APP_VER='1.9.0';
+const APP_NAME='Salli', APP_VER='1.9.1';
 let KEY='salli.mm.v2';
 const KEY_BASE='salli.mm.v2';
 const NATIVE=!!(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform());
@@ -836,7 +836,9 @@ function unlinkTx(id){if(!id)return;
   S.loans.forEach(l=>{l.payments=l.payments.filter(p=>p.txId!==id);l.payments.forEach(p=>{if(p.feeTxId===id){p.fee=0;p.feeTxId=null}})});
   S.lendings.forEach(l=>{l.payments=l.payments.filter(p=>p.txId!==id)});
   (S.installments||[]).forEach(x=>{if(x.payments)x.payments=x.payments.filter(p=>p.txId!==id)});
-  (S.subs||[]).forEach(x=>{const p=(x.payments||[]).find(y=>y.txId===id);if(p)subDropPayment(x,p.id)})}
+  (S.subs||[]).forEach(x=>{const p=(x.payments||[]).find(y=>y.txId===id);if(p)subDropPayment(x,p.id)});
+  (S.recurring||[]).forEach(r=>{const i=(r.payments||[]).findIndex(y=>y.txId===id);if(i<0)return;const p=r.payments[i];const last=i===r.payments.length-1;r.payments.splice(i,1);if(last&&p.due)r.next=p.due});
+  (S.goals||[]).forEach(g=>{if(g.contributions)g.contributions=g.contributions.filter(c=>c.txId!==id)})}
 /* the transaction that recorded a loan being received / a lending being given */
 const loanRecvTx=l=>S.txns.find(t=>t.kind==='loan_receive'&&t.link&&t.link.loan===l.id)||S.txns.find(t=>t.kind==='loan_receive'&&!(t.link&&t.link.loan)&&t.who===l.name);
 const lendGiveTx=x=>S.txns.find(t=>t.kind==='lend_give'&&t.link&&t.link.lend===x.id)||S.txns.find(t=>t.kind==='lend_give'&&!(t.link&&t.link.lend)&&t.who===x.name);
@@ -857,6 +859,9 @@ function syncPayFromTx(id){const t=S.txns.find(x=>x.id===id);if(!t)return false;
     if(p.paid!==paid||p.amount!==amt||p.date!==t.date||p.note!==t.note||p.accId!==t.accId){p.paid=paid;p.amount=amt;p.date=t.date;p.note=t.note;p.accId=t.accId;ch=true}};
   S.loans.forEach(l=>l.payments.forEach(p=>{if(p.txId===id)upd(p,lcur(l))}));S.lendings.forEach(l=>l.payments.forEach(p=>{if(p.txId===id)upd(p,lcur(l))}));
   (S.subs||[]).forEach(x=>(x.payments||[]).forEach(p=>{if(p.txId===id&&(p.amount!==+t.amount||p.date!==t.date)){p.amount=+t.amount;p.date=t.date;ch=true}}));
+  (S.recurring||[]).forEach(r=>(r.payments||[]).forEach(p=>{if(p.txId===id&&(p.amount!==+t.amount||p.date!==t.date||p.accId!==t.accId)){p.amount=+t.amount;p.date=t.date;p.accId=t.accId;ch=true}}));
+  (S.installments||[]).forEach(x=>(x.payments||[]).forEach(p=>{if(p.txId!==id)return;const v=round2(conv(+t.amount,ac,S.settings.base));if(p.amount!==v||p.date!==t.date||p.accId!==t.accId){p.amount=v;p.date=t.date;p.accId=t.accId;ch=true}}));
+  (S.goals||[]).forEach(g=>(g.contributions||[]).forEach(c=>{if(c.txId!==id)return;const v=round2(conv(+t.amount,ac,S.settings.base))*(c.amount<0?-1:1);if(c.amount!==v||c.accId!==t.accId){c.amount=v;c.accId=t.accId;ch=true}}));
   // editing the "loan received" / "lending given" transaction updates the loan / lending amount
   const ln=loanOfTx(t);if(ln){const v=accCur(t.accId)===lcur(ln)?+t.amount:round2(conv(+t.amount,accCur(t.accId),lcur(ln)));if(ln.principal!==v||ln.accId!==t.accId){ln.principal=v;ln.accId=t.accId;ch=true}}
   const ld=lendOfTx(t);if(ld){const v=accCur(t.accId)===lcur(ld)?+t.amount:round2(conv(+t.amount,accCur(t.accId),lcur(ld)));if(ld.amount!==v||ld.accId!==t.accId){ld.amount=v;ld.accId=t.accId;ch=true}}
@@ -1522,7 +1527,9 @@ A.edacc=el=>{U.edit.accId=el.dataset.id;render()};
 A.edtag=el=>{const n=el.dataset.v;const tg=U.edit.tags||[];U.edit.tags=tg.includes(n)?tg.filter(x=>x!==n):[...tg,n];render()};
 A.edsave=()=>{const e=U.edit;if(!(e.amount>0)){toast('Enter an amount above zero',true);return}if(!e.catId){toast('Choose a category',true);return}if(!e.accId){toast('Choose an account',true);return}
   const i=S.txns.findIndex(x=>x.id===e.id);const rec={...e};delete rec.link;
+  if(i>=0&&S.txns[i].link)rec.link=S.txns[i].link; // keep the loan / lending / FD link of an existing transaction
   if(i>=0)S.txns[i]=rec;else{rec.id=rec.id||uid();S.txns.push(rec)}
+  if(i>=0)syncPayFromTx(rec.id);
   if(e.link&&e.link.sub){const sb=S.subs.find(x=>x.id===e.link.sub);if(sb){sb.payments.push({id:uid(),date:e.date,amount:e.amount,txId:rec.id,prevNext:sb.next});sb.next=advanceDate(sb.next,sb.freq)}}
   U.edit=null;back();commit('Successfully saved transaction')};
 const advanceDate=(d,f)=>f==='daily'?addDays(d,1):f==='weekly'?addDays(d,7):f==='quarterly'?addMonths(d,3):f==='yearly'?addMonths(d,12):addMonths(d,1);
@@ -2094,7 +2101,10 @@ A.lnsave=()=>{const st=topSheet().st;const P=parseFloat(st.principal),rate=parse
   if(!st.name.trim()){st.err='Enter a loan name.';rs();return}if(!(P>0)){st.err='Enter the loan amount.';rs();return}
   if(rate>0&&!(m>0)){st.err='Enter the tenure in months to calculate interest.';rs();return}
   const f={name:st.name.trim(),type:st.type,lender:st.lender,currency:st.currency,principal:P,rate,months:m,start:st.start};
-  if(st.id){Object.assign(S.loans.find(x=>x.id===st.id),f);closeSheet();commit('Loan updated');return}
+  if(st.id){const l=S.loans.find(x=>x.id===st.id);const oldP=+l.principal,oldCur=lcur(l);const rt=loanRecvTx(l);Object.assign(l,f);
+    if(rt){const ac=accCur(rt.accId);const amt=ac===f.currency?P:(oldCur===f.currency&&oldP>0?round2(+rt.amount*P/oldP):round2(conv(P,f.currency,ac)));
+      Object.assign(rt,{who:l.name,amount:amt,note:'Loan received: '+l.name+(f.currency!==ac?` (${money(P,f.currency)})`:''),link:{loan:l.id}})}
+    closeSheet();commit('Loan updated');return}
   const l={id:uid(),...f,accId:st.accId,payments:[]};S.loans.push(l);
   if(st.accId)S.txns.push({id:uid(),type:'income',kind:'loan_receive',who:l.name,accId:st.accId,amount:round2(conv(P,st.currency,accCur(st.accId))),date:today(),time:nowTime(),note:'Loan received: '+l.name+(st.currency!==accCur(st.accId)?` (${money(P,st.currency)})`:''),tags:[],link:{loan:l.id}});
   closeSheet();commit('Loan added')};
@@ -2179,17 +2189,24 @@ SCR.lendings=()=>{const tb=U.lendTab||'out';const L=S.lendings.filter(x=>tb==='o
    ||emptyState('wallet',tb==='out'?'No outstanding lendings found. Add a new lending to get started.':'No settled lendings yet.',tb==='out'?'Tap + to add a new lending':'')}</div>`,fab:fabBtn('lendnew',true)};
 };
 A.lendtab=el=>{U.lendTab=el.dataset.v;render()};
-A.lendnew=()=>openSheet(st=>{const v=parseFloat(st.amount)||0;const ac=st.accId&&accCur(st.accId);
-  return `<h3 class="sec" style="font-size:calc(17px*var(--fs))">New Lending</h3><div class="fld"><label for="ld_n">Person's name</label><input id="ld_n" value="${esc(st.name)}" data-in="ldf" data-k="name"></div>
-  <div class="fld"><label>Lending currency</label><button class="iconfield" style="min-height:48px" data-a="ldcur">${ic('fx')}<span class="grow"><b>${st.currency} — ${esc(CURM[st.currency]?.name||'')}</b></span>${ic('chevR')}</button></div>
+A.lendnew=(el,ds,ev,init)=>openSheet(st=>{const v=parseFloat(st.amount)||0;const ac=st.accId&&accCur(st.accId);const lockCur=st.id&&(S.lendings.find(y=>y.id===st.id)?.payments||[]).length>0;
+  return `<h3 class="sec" style="font-size:calc(17px*var(--fs))">${st.id?'Edit Lending':'New Lending'}</h3><div class="fld"><label for="ld_n">Person's name</label><input id="ld_n" value="${esc(st.name)}" data-in="ldf" data-k="name"></div>
+  <div class="fld"><label>Lending currency</label><button class="iconfield" style="min-height:48px" data-a="ldcur" ${lockCur?'disabled':''}>${ic(lockCur?'lock':'fx')}<span class="grow"><b>${st.currency} — ${esc(CURM[st.currency]?.name||'')}</b>${lockCur?'<small>Currency can’t change after payments are received</small>':''}</span>${lockCur?'':ic('chevR')}</button></div>
   <div class="fld"><label for="ld_a">Amount (${esc(sym(st.currency))})</label><input id="ld_a" inputmode="decimal" value="${esc(st.amount)}" data-in="ldf" data-k="amount" data-r="1"></div>
   ${accChips(st.accId,'ldacc',{title:'Paid from account',noAdd:true})}${ac&&ac!==st.currency&&v>0?`<span class="tiny muted">${money(conv(v,st.currency,ac),ac)} will be taken from ${esc(accName(st.accId))} (1 ${st.currency} = ${rateOf(st.currency,ac).toFixed(4)} ${ac}).</span>`:''}
   <div class="g2"><div class="fld"><label for="ld_d">Due date</label><input type="date" id="ld_d" value="${st.due}" data-ch="ldf" data-k="due"></div><div class="fld"><label for="ld_note">Note</label><input id="ld_note" value="${esc(st.note)}" data-in="ldf" data-k="note"></div></div>
-  ${st.err?`<span class="err">${st.err}</span>`:''}<div class="btns"><button class="btn out" data-a="close">Cancel</button><button class="btn" data-a="ldsave">Save</button></div>`},{name:'',amount:'',currency:accCur(defaultAcc()),accId:defaultAcc(),due:addMonths(today(),1),note:''},{full:true});
+  ${st.err?`<span class="err">${st.err}</span>`:''}<div class="btns"><button class="btn out" data-a="close">Cancel</button><button class="btn" data-a="ldsave">${st.id?'Save changes':'Save'}</button></div>`},init||{name:'',amount:'',currency:accCur(defaultAcc()),accId:defaultAcc(),due:addMonths(today(),1),note:''},{full:true});
+function lendForm(id){const x=S.lendings.find(y=>y.id===id);if(!x)return;const gt=lendGiveTx(x);A.lendnew(null,null,null,{id:x.id,name:x.name,amount:String(x.amount),currency:lcur(x),accId:(gt&&gt.accId)||x.accId||defaultAcc(),due:x.due||addMonths(today(),1),note:x.note||''})}
 A.ldf=el=>{const st=topSheet().st;st[el.dataset.k]=el.value;st.err='';if(el.dataset.r)rs()};
 A.ldacc=el=>{topSheet().st.accId=el.dataset.id;rs()};
 A.ldcur=()=>{const st=topSheet().st;currencyPicker(st.currency,c=>{st.currency=c;rs()},'Lending Currency')};
 A.ldsave=()=>{const st=topSheet().st;const v=parseFloat(st.amount);if(!st.name.trim()){st.err='Enter the person’s name.';rs();return}if(!(v>0)){st.err='Enter an amount above zero.';rs();return}if(!st.accId){st.err='Choose the account the money came from.';rs();return}
+  if(st.id){const x=S.lendings.find(y=>y.id===st.id);if(!x){closeSheet();return}const gt=lendGiveTx(x);const oldA=+x.amount,oldCur=lcur(x),oldAcc=gt&&gt.accId;
+    Object.assign(x,{name:st.name.trim(),currency:st.currency,amount:v,accId:st.accId,due:st.due,note:st.note});const ac=accCur(st.accId);
+    if(gt){const amt=ac===st.currency?v:(oldCur===st.currency&&oldAcc===st.accId&&oldA>0?round2(+gt.amount*v/oldA):round2(conv(v,st.currency,ac)));
+      Object.assign(gt,{who:x.name,accId:st.accId,amount:amt,note:ac!==st.currency?`Lent ${money(v,st.currency)}`:'',link:{lend:x.id}})}
+    else S.txns.push({id:uid(),type:'expense',kind:'lend_give',who:x.name,accId:st.accId,amount:round2(conv(v,st.currency,ac)),date:x.created||today(),time:nowTime(),note:ac!==st.currency?`Lent ${money(v,st.currency)}`:'',tags:[],link:{lend:x.id}});
+    closeSheet();commit('Lending updated');return}
   const x={id:uid(),name:st.name.trim(),currency:st.currency,amount:v,accId:st.accId,due:st.due,note:st.note,created:today(),payments:[]};S.lendings.push(x);
   const ac=accCur(st.accId);S.txns.push({id:uid(),type:'expense',kind:'lend_give',who:x.name,accId:st.accId,amount:round2(conv(v,st.currency,ac)),date:today(),time:nowTime(),note:ac!==st.currency?`Lent ${money(v,st.currency)}`:'',tags:[],link:{lend:x.id}});
   closeSheet();go('lending',{id:x.id});commit('Lending and transactions created successfully')};
@@ -2203,8 +2220,24 @@ SCR.lending=p=>{const x=S.lendings.find(y=>y.id===p.id);if(!x)return SCR.lending
    <span class="h2">Timeline</span><div class="timeline">${[...x.payments.map(y=>({d:y.date,t:'Payment Received',s:'Payment of '+(y.payCur&&y.payCur!==c?money(y.paid,y.payCur)+' ('+M(y.amount)+')':M(y.amount))})).reverse(),{d:x.created,t:'Lending Created',s:'Lending of '+M(x.amount)+' was created'}].map(e=>`<div class="tl card tight"><div class="between"><b class="small">${e.t}</b><span class="badge">${fD(e.d).replace(/, \d{4}$/,'')}</span></div><div class="tiny muted">${e.s}</div></div>`).join('')}</div></div>`,
    bottom:`<div class="bottombar pad"><div><button class="btn w" data-a="lendrecv" data-id="${x.id}">${ic('card')} Receive Payment</button></div></div>`,fab:false};
 };
-A.lendmenu=el=>{const id=el.dataset.id;openMenu(el,[{l:'Delete lending',i:'trash',red:true,a:()=>confirmDel('Delete lending?','The lending, its "lending created" transaction and all received payment transactions are removed, and your account balances are updated.',()=>{const x=S.lendings.find(y=>y.id===id);if(x)removeLending(x);back();commit('Lending deleted')})}])};
-A.lpaymenu=el=>{const x=S.lendings.find(y=>y.id===el.dataset.id);const pid=el.dataset.p;openMenu(el,[{l:'Delete payment',i:'trash',red:true,a:()=>{const p=x.payments.find(y=>y.id===pid);x.payments=x.payments.filter(y=>y.id!==pid);if(p&&p.txId)S.txns=S.txns.filter(t=>t.id!==p.txId);commit('Payment deleted')}}])};
+A.lendmenu=el=>{const id=el.dataset.id;openMenu(el,[{l:'Edit lending',i:'edit',a:()=>lendForm(id)},{l:'Delete lending',i:'trash',red:true,a:()=>confirmDel('Delete lending?','The lending, its "lending created" transaction and all received payment transactions are removed, and your account balances are updated.',()=>{const x=S.lendings.find(y=>y.id===id);if(x)removeLending(x);back();commit('Lending deleted')})}])};
+A.lpaymenu=el=>{const x=S.lendings.find(y=>y.id===el.dataset.id);const pid=el.dataset.p;openMenu(el,[{l:'Edit payment',i:'edit',a:()=>lrPayEdit(x.id,pid)},{l:'Delete payment',i:'trash',red:true,a:()=>{const p=x.payments.find(y=>y.id===pid);x.payments=x.payments.filter(y=>y.id!==pid);if(p&&p.txId)S.txns=S.txns.filter(t=>t.id!==p.txId);commit('Payment deleted')}}])};
+function lrPayEdit(xid,pid){const x=S.lendings.find(y=>y.id===xid);const p=x.payments.find(y=>y.id===pid);const c=lcur(x);const pc=p.payCur||c;const t=p.txId&&S.txns.find(y=>y.id===p.txId);
+  openSheet(st=>{const v=parseFloat(st.amt)||0;const ac=accCur(st.accId);const rate=pc===c?1:(+p.rate||rateOf(pc,c));return `<div class="sh"><div><h3>Edit received payment</h3><span class="small muted">${esc(x.name)} · ${fD(p.date)}</span></div><button class="ib" data-a="close" aria-label="Close">${ic('x')}</button></div>
+   <span class="tiny muted b">AMOUNT RECEIVED (${pc})</span><label class="row"><span class="muted" style="font-size:calc(18px*var(--fs))">${esc(sym(pc))}</span><input id="lre_amt" inputmode="decimal" placeholder="0.00" value="${esc(st.amt)}" data-in="lref" data-k="amt" data-r="1" style="border:0;background:transparent;font-size:calc(28px*var(--fs));font-weight:800;flex:1;min-width:0"></label>
+   ${pc!==c&&v>0?`<span class="tiny green">= ${money(round2(v*rate),c)} off the balance · 1 ${pc} = ${rate.toFixed(4)} ${c}</span>`:''}
+   <span class="tiny muted b">RECEIVED INTO</span>${walletCards(st.accId,'lreacc')}
+   ${st.accId&&ac!==pc&&v?`<span class="tiny muted">${money(conv(v,pc,ac),ac)} will be added to ${esc(accName(st.accId))}.</span>`:''}
+   <div class="card"><span class="tiny muted b">RECEIVE DATE</span><input type="date" id="lre_d" value="${st.date}" data-ch="lref" data-k="date" style="width:100%;border:0;background:transparent;padding:6px 0"><span class="tiny muted b">NOTE</span><input id="lre_n" value="${esc(st.note)}" data-in="lref" data-k="note" style="width:100%;border:0;background:transparent;padding:6px 0"></div>
+   ${st.err?`<span class="err">${st.err}</span>`:''}<div class="btns"><button class="btn out" data-a="close">Cancel</button><button class="btn" data-a="lresave">Save changes</button></div>`},
+   {xid,pid,amt:String(p.paid!=null?p.paid:p.amount),accId:(t&&t.accId)||p.accId||defaultAcc(),date:p.date,note:p.note||''})}
+A.lref=el=>{const st=topSheet().st;st[el.dataset.k]=el.value;st.err='';if(el.dataset.r)rs()};A.lreacc=el=>{topSheet().st.accId=el.dataset.id;rs()};
+A.lresave=()=>{const st=topSheet().st;const x=S.lendings.find(y=>y.id===st.xid);const p=x&&x.payments.find(y=>y.id===st.pid);if(!p){closeSheet();return}const v=parseFloat(st.amt);
+  if(!(v>0)){st.err='Enter an amount above zero.';rs();return}if(!st.accId){st.err='Choose an account.';rs();return}
+  const c=lcur(x),pc=p.payCur||c,rate=pc===c?1:(+p.rate||rateOf(pc,c)),ac=accCur(st.accId);
+  Object.assign(p,{paid:v,payCur:pc,rate,amount:round2(pc===c?v:v*rate),accId:st.accId,date:st.date,note:st.note});
+  let t=p.txId&&S.txns.find(y=>y.id===p.txId);if(!t){t={id:uid(),type:'income',kind:'lend_receive',who:x.name,time:nowTime(),tags:[]};S.txns.push(t);p.txId=t.id}
+  Object.assign(t,{accId:st.accId,amount:round2(conv(v,pc,ac)),date:st.date,note:st.note});closeSheet();commit('Payment updated')};
 A.lendrecv=el=>{const x=S.lendings.find(y=>y.id===el.dataset.id);const c=lcur(x);
   openSheet(st=>`<div class="sh"><div><h3>Receive Payment</h3><span class="small muted">Enter the payment amount received for "${esc(x.name)}":</span></div><button class="ib" data-a="close" aria-label="Close">${ic('x')}</button></div>
    ${settleBox(st,c)}<span class="tiny muted">Current remaining balance: ${money(lendRemain(x),c)}</span>
@@ -2393,8 +2426,8 @@ function goalMoney(id,sign){const g=S.goals.find(x=>x.id===id);
 A.goaladd=el=>goalMoney(el.dataset.id,1);A.goalwd=el=>goalMoney(el.dataset.id,-1);
 A.gmf=el=>{topSheet().st.amt=el.value};A.gmacc=el=>{const st=topSheet().st;st.accId=st.accId===el.dataset.id?null:el.dataset.id;rs()};
 A.gmok=()=>{const st=topSheet().st;const g=S.goals.find(x=>x.id===st.id);const v=parseFloat(st.amt);if(!(v>0)){st.err='Enter an amount above zero.';rs();return}if(st.sign<0&&v>goalSaved(g)){st.err='You can withdraw up to '+B(goalSaved(g))+'.';rs();return}
-  g.contributions.push({id:uid(),amount:v*st.sign,date:today(),accId:st.accId});
-  if(st.accId)S.txns.push({id:uid(),type:st.sign>0?'expense':'income',kind:'goal',who:g.name,accId:st.accId,amount:round2(conv(v,S.settings.base,accCur(st.accId))),date:today(),time:nowTime(),note:(st.sign>0?'Saved to ':'Withdrawn from ')+g.name,tags:[]});
+  const gtx=st.accId?uid():null;g.contributions.push({id:uid(),amount:v*st.sign,date:today(),accId:st.accId,txId:gtx});
+  if(st.accId)S.txns.push({id:gtx,type:st.sign>0?'expense':'income',kind:'goal',who:g.name,accId:st.accId,amount:round2(conv(v,S.settings.base,accCur(st.accId))),date:today(),time:nowTime(),note:(st.sign>0?'Saved to ':'Withdrawn from ')+g.name,tags:[]});
   if(goalSaved(g)>=g.target&&!g.completed){g.completed=true;closeSheet();commit('Goal reached! Moved to completed.');return}closeSheet();commit('Goal updated')};
 
 /* ---------------- To-Do ---------------- */
