@@ -102,3 +102,9 @@ cd android && ./gradlew assembleDebug
 - **Sign-in screen** redesigned to look like part of the app: full colour background, large Salli logo, frosted form card and a big Sign in button.
 - **Spending Trend**: touch and drag across the chart — a line follows your finger with dots on each series and a dark value box (Income, Expense, Cash In, Cash Out and the date). Lines are now smooth curves.
 - **Due Soon card** on the dashboard (under SMS setup): loan instalments, money to receive, subscriptions, recurring payments and installments that are overdue or due within 7 days, e.g. "Payment overdue by 3 days". › opens the item, × hides that due. It can be moved or hidden in Customize Dashboard.
+
+## Version 1.9.3
+- **Transfers between different currencies** (including from a credit card): optional *Exchange rate* box — "1 MVR = [17] LKR", tap the currency to quote it the other way round. You can type the rate or the amount received (the other fills in). The rate is used for this transfer only.
+  The receiving account gets the app-rate amount as the transfer plus the difference as **Exchange Gain** (income) or **Exchange Loss** (expense), so its balance equals the amount your bank actually credited. These appear in the transaction list, reports and bank statements.
+- **Edit transfer** in each transfer's ⋮ menu (accounts, amount, rate, fee, date, note).
+- **Loans: agreed exchange rates** (Add/Edit Loan → "Agreed exchange rates"): one rate per currency for that loan. The loan received amount, every repayment (in any currency or from any account) and the liability shown in your main currency use those rates — not the app rates — for that loan only.

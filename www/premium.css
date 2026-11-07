@@ -169,3 +169,9 @@ button:focus-visible{outline:2px solid color-mix(in srgb,var(--accent) 70%,trans
 .auth-shell .auth-spinner{border-color:rgba(255,255,255,.25);border-top-color:#fff}
 .auth-shell .cloud-status{color:rgba(255,255,255,.65)}
 .auth-shell .auth-message.auth-error{color:#FFE1DC;background:rgba(120,20,10,.3);padding:8px 10px;border-radius:10px}
+
+/* ---------- "1 A = [rate] B" exchange-rate rows (transfers, loans) ---------- */
+.fxrow{display:flex;align-items:center;gap:8px}
+.fxrow .chip{flex:none;font-weight:700}
+.fxrow input{flex:1;min-width:0;padding:11px 12px;border-radius:12px;border:1px solid var(--line);background:var(--field);color:var(--fg);font-weight:700;font-variant-numeric:tabular-nums}
+.fxrow b{flex:none;min-width:34px}

@@ -621,7 +621,7 @@ button,input,select,textarea{font-family:inherit}
 /* =================================================================
    Salli Money Manager — core: helpers, currencies, state, derived data
    ================================================================= */
-const APP_NAME='Salli', APP_VER='1.9.2';
+const APP_NAME='Salli', APP_VER='1.9.3';
 let KEY='salli.mm.v2';
 const KEY_BASE='salli.mm.v2';
 const NATIVE=!!(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform());
@@ -864,7 +864,7 @@ function syncPayFromTx(id){const t=S.txns.find(x=>x.id===id);if(!t)return false;
   (S.installments||[]).forEach(x=>(x.payments||[]).forEach(p=>{if(p.txId!==id)return;const v=round2(conv(+t.amount,ac,S.settings.base));if(p.amount!==v||p.date!==t.date||p.accId!==t.accId){p.amount=v;p.date=t.date;p.accId=t.accId;ch=true}}));
   (S.goals||[]).forEach(g=>(g.contributions||[]).forEach(c=>{if(c.txId!==id)return;const v=round2(conv(+t.amount,ac,S.settings.base))*(c.amount<0?-1:1);if(c.amount!==v||c.accId!==t.accId){c.amount=v;c.accId=t.accId;ch=true}}));
   // editing the "loan received" / "lending given" transaction updates the loan / lending amount
-  const ln=loanOfTx(t);if(ln){const v=accCur(t.accId)===lcur(ln)?+t.amount:round2(conv(+t.amount,accCur(t.accId),lcur(ln)));if(ln.principal!==v||ln.accId!==t.accId){ln.principal=v;ln.accId=t.accId;ch=true}}
+  const ln=loanOfTx(t);if(ln){const v=accCur(t.accId)===lcur(ln)?+t.amount:round2(lconv(ln,+t.amount,accCur(t.accId),lcur(ln)));if(ln.principal!==v||ln.accId!==t.accId){ln.principal=v;ln.accId=t.accId;ch=true}}
   const ld=lendOfTx(t);if(ld){const v=accCur(t.accId)===lcur(ld)?+t.amount:round2(conv(+t.amount,accCur(t.accId),lcur(ld)));if(ld.amount!==v||ld.accId!==t.accId){ld.amount=v;ld.accId=t.accId;ch=true}}
   return ch}
 
@@ -880,7 +880,7 @@ const KIND_INFO={
   transfer_in:{title:'Transfer In',icon:'🔁'},transfer_out:{title:'Transfer Out',icon:'🔁'},
   lend_give:{title:'Give Lending',icon:'🤲'},lend_receive:{title:'Receive Lending',icon:'🤲'},
   loan_receive:{title:'Loan',icon:'🏦'},loan_pay:{title:'Loan Payment',icon:'🏦'},bank_fee:{title:'Bank Fee',icon:'🏛️'},
-  card_pay:{title:'Card Payment',icon:'💳'},goal:{title:'Goal Saving',icon:'🎯'},inst:{title:'Installment',icon:'🧾'}
+  card_pay:{title:'Card Payment',icon:'💳'},fx_gain:{title:'Exchange Gain',icon:'💱'},fx_loss:{title:'Exchange Loss',icon:'💱'},goal:{title:'Goal Saving',icon:'🎯'},inst:{title:'Installment',icon:'🧾'}
 };
 function txTitle(t){
   if(t.catId&&cat(t.catId)&&!['transfer_in','transfer_out','initial','correction','lend_give','lend_receive','loan_receive','loan_pay','bank_fee','card_pay'].includes(t.kind))return cat(t.catId).name;
@@ -888,8 +888,8 @@ function txTitle(t){
 }
 function txIcon(t){if(t.catId&&cat(t.catId)&&!KIND_INFO[t.kind])return cat(t.catId).icon;const k=KIND_INFO[t.kind];return k?k.icon:(t.catId&&cat(t.catId)?cat(t.catId).icon:'💸')}
 const tBase=t=>conv(t.amount,accCur(t.accId),S.settings.base);
-const STAT_INC=['normal','recurring'];
-const STAT_EXP=['normal','recurring','sub','inst','bank_fee'];
+const STAT_INC=['normal','recurring','fx_gain'];
+const STAT_EXP=['normal','recurring','sub','inst','bank_fee','fx_loss'];
 const isInc=t=>t.type==='income'&&STAT_INC.includes(t.kind||'normal');
 const isExp=t=>t.type==='expense'&&STAT_EXP.includes(t.kind||'normal');
 const isCashIn=t=>t.type==='income'&&!['initial','correction','transfer_in','loan_receive'].includes(t.kind);
@@ -921,8 +921,12 @@ const lendPaid=x=>sum(x.payments,p=>p.amount);
 const lendRemain=x=>Math.max(0,round2(x.amount-lendPaid(x)));
 /* Loans and lendings keep their own currency; *B helpers give the value in the functional currency */
 const lcur=x=>x.currency||S.settings.base;
-const loanRemainB=l=>conv(loanRemain(l),lcur(l),S.settings.base);
-const emiB=l=>conv(emiOf(l),lcur(l),S.settings.base);
+/* a loan's own agreed exchange rates (l.rates[CUR] = how many CUR for 1 unit of the loan currency); app rates are used when none is set */
+function lconv(l,v,from,to){v=+v||0;if(from===to||!v)return v;const c=lcur(l),R=(l&&l.rates)||{};
+  if(from===c&&R[to])return v*R[to];if(to===c&&R[from])return v/R[from];if(R[from]&&R[to])return v/R[from]*R[to];
+  if(R[from])return conv(v/R[from],c,to);if(R[to])return conv(v,from,c)*R[to];return conv(v,from,to)}
+const loanRemainB=l=>lconv(l,loanRemain(l),lcur(l),S.settings.base);
+const emiB=l=>lconv(l,emiOf(l),lcur(l),S.settings.base);
 const lendRemainB=x=>conv(lendRemain(x),lcur(x),S.settings.base);
 const instPaidCount=x=>(+x.initialPaid||0)+x.payments.length;
 const instPaidAmt=x=>(+x.advance||0)+(+x.initialPaid||0)*x.amount+sum(x.payments,p=>p.amount);
@@ -1771,32 +1775,56 @@ A.cfsave=()=>{const st=topSheet().st;const lim=parseFloat(st.limit),av=parseFloa
   const c={id:uid(),type:'credit',include:true,isDefault:false,...fields};S.accounts.push(c);if(av)S.txns.push({id:uid(),type:'income',kind:'initial',accId:c.id,amount:round2(av),date:today(),time:nowTime(),note:'',tags:[]});closeSheet();commit('Credit card added')};
 
 /* ---------------- Transfers ---------------- */
-function doTransfer(from,to,amt,fee,date,note){
-  const fa=acc(from),ta=acc(to);const toAmt=round2(conv(amt,fa.currency,ta.currency));const g=uid();
-  const o={id:uid(),type:'expense',kind:'transfer_out',accId:from,amount:round2(amt),date,time:nowTime(),note,tags:[],group:g,peer:to};
-  const i={id:uid(),type:'income',kind:'transfer_in',accId:to,amount:toAmt,date,time:nowTime(),note,tags:[],group:g,peer:from};
+function doTransfer(from,to,amt,fee,date,note,opt){opt=opt||{};
+  const fa=acc(from),ta=acc(to);const toAmt=round2(conv(amt,fa.currency,ta.currency));const g=opt.group||uid();const tm=opt.time||nowTime();
+  const o={id:uid(),type:'expense',kind:'transfer_out',accId:from,amount:round2(amt),date,time:tm,note,tags:[],group:g,peer:to};
+  const i={id:uid(),type:'income',kind:'transfer_in',accId:to,amount:toAmt,date,time:tm,note,tags:[],group:g,peer:from};
   o.pair=i.id;i.pair=o.id;S.txns.push(o,i);
+  // own exchange rate for this transfer only: the difference to the app rate is booked as exchange gain (income) or loss (expense) in the receiving account
+  if(fa.currency!==ta.currency&&opt.rate>0){const real=round2(amt*opt.rate),diff=round2(real-toAmt);o.fxRate=opt.rate;o.fxDir=opt.dir||'fwd';o.appRate=rateOf(fa.currency,ta.currency);
+    const q=o.fxDir==='rev'?`1 ${ta.currency} = ${(1/opt.rate).toFixed(4)} ${fa.currency}`:`1 ${fa.currency} = ${opt.rate.toFixed(4)} ${ta.currency}`;
+    if(Math.abs(diff)>=0.01)S.txns.push({id:uid(),type:diff>0?'income':'expense',kind:diff>0?'fx_gain':'fx_loss',accId:to,amount:Math.abs(diff),date,time:tm,note:`Exchange ${diff>0?'gain':'loss'} on transfer from ${fa.name} (${q})`,tags:[],group:g})}
   if(fee>0)S.txns.push({id:uid(),type:'expense',kind:'bank_fee',catId:S.categories.find(c=>c.name==='Bank Charges')?.id,accId:from,amount:round2(fee),date,time:nowTime(),note:'Transfer fee',tags:[],group:g});
 }
-SCR.transfers=()=>{const gs={};S.txns.filter(t=>t.kind==='transfer_out').forEach(t=>gs[t.group]=t);const L=Object.values(gs).sort((a,b)=>b.date.localeCompare(a.date));
+SCR.transfers=()=>{if(U.tr&&U.tr.edit)U.tr=null;const gs={};S.txns.filter(t=>t.kind==='transfer_out').forEach(t=>gs[t.group]=t);const L=Object.values(gs).sort((a,b)=>b.date.localeCompare(a.date));
   return {top:hdr(T('Transfers')==='Transfers'?'Account Transfers':T('Transfers')),html:`<div class="pad stack">${L.map(t=>{const inn=S.txns.find(x=>x.id===t.pair);return `<div class="card"><div class="row"><span class="ic green">${ic('swap')}</span><span class="grow"><span class="small muted">From Account</span> <b>${esc(accName(t.accId))}</b><div class="small muted">↓</div><span class="small muted">To:</span> <b>${esc(accName(t.peer))}</b></span><button class="ib" data-a="trmenu" data-g="${t.group}" aria-label="Options">${ic('more')}</button></div>
-   <div class="between" style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px"><b class="green num">${money(t.amount,accCur(t.accId))}${inn&&accCur(inn.accId)!==accCur(t.accId)?` → ${money(inn.amount,accCur(inn.accId))}`:''}</b><span class="small muted">${fD(t.date)}</span></div>${t.note?`<div class="small muted">≡ ${esc(t.note)}</div>`:''}</div>`}).join('')||emptyState('swap','No transfers yet','Move money between your accounts',`<button class="btn" data-a="go" data-n="transfer">${ic('plus',2)} New Transfer</button>`)}</div>`,fab:fabBtn('go',true,'data-n="transfer"')}};
-A.trmenu=el=>{const g=el.dataset.g;openMenu(el,[{l:'Delete transfer',i:'trash',red:true,a:()=>confirmDel('Delete transfer?','Both sides of the transfer and any fee will be removed.',()=>{S.txns=S.txns.filter(t=>t.group!==g);commit('Transfer deleted')})}])};
-SCR.transfer=()=>{const st=U.tr=U.tr||{from:null,to:null,amt:'',fee:'',date:today(),note:''};
+   <div class="between" style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px"><b class="green num">${money(t.amount,accCur(t.accId))}${inn&&accCur(inn.accId)!==accCur(t.accId)?` → ${money(inn.amount+trFx(t.group),accCur(inn.accId))}`:''}</b><span class="small muted">${fD(t.date)}</span></div>${t.fxRate&&inn?`<div class="tiny muted">My rate ${t.fxDir==='rev'?`1 ${accCur(inn.accId)} = ${(1/t.fxRate).toFixed(4)} ${accCur(t.accId)}`:`1 ${accCur(t.accId)} = ${(+t.fxRate).toFixed(4)} ${accCur(inn.accId)}`}${trFx(t.group)?` · <span class="${trFx(t.group)>0?'green':'red'}">Exchange ${trFx(t.group)>0?'gain':'loss'} ${money(Math.abs(trFx(t.group)),accCur(inn.accId))}</span>`:''}</div>`:''}${t.note?`<div class="small muted">≡ ${esc(t.note)}</div>`:''}</div>`}).join('')||emptyState('swap','No transfers yet','Move money between your accounts',`<button class="btn" data-a="go" data-n="transfer">${ic('plus',2)} New Transfer</button>`)}</div>`,fab:fabBtn('go',true,'data-n="transfer"')}};
+const trFx=g=>sum(S.txns.filter(t=>t.group===g&&(t.kind==='fx_gain'||t.kind==='fx_loss')),t=>t.kind==='fx_gain'?+t.amount:-t.amount);
+A.trmenu=el=>{const g=el.dataset.g;openMenu(el,[{l:'Edit transfer',i:'edit',a:()=>{const o=S.txns.find(t=>t.group===g&&t.kind==='transfer_out');if(!o)return;const i=S.txns.find(t=>t.id===o.pair);const fee=S.txns.find(t=>t.group===g&&t.kind==='bank_fee');
+    const cx=i&&accCur(o.accId)!==accCur(i.accId);const dir=o.fxDir||(cx&&!fxStrong(accCur(o.accId),accCur(i.accId))?'rev':'fwd');
+    U.tr={edit:g,time:o.time,from:o.accId,to:o.peer,amt:String(o.amount),fee:fee?String(fee.amount):'',date:o.date,note:o.note||'',dir,rate:o.fxRate?String(+(dir==='rev'?1/o.fxRate:o.fxRate).toFixed(6)):'',recv:o.fxRate&&i?String(round2(i.amount+trFx(g))):''};go('transfer')}},{l:'Delete transfer',i:'trash',red:true,a:()=>confirmDel('Delete transfer?','Both sides of the transfer and any fee will be removed.',()=>{S.txns=S.txns.filter(t=>t.group!==g);commit('Transfer deleted')})}])};
+SCR.transfer=()=>{const st=U.tr=U.tr||{from:null,to:null,amt:'',fee:'',date:today(),note:'',rate:'',recv:'',dir:null};
   const sel=(k,l)=>`<button class="row" style="width:100%;text-align:left;padding:6px 0" data-a="trpick" data-k="${k}"><span class="ic green">${ic('wallet')}</span><span class="grow"><span class="tiny muted b">${l}</span><div class="${st[k]?'b':'muted'}">${st[k]?esc(accName(st[k])):'Select account'}</div></span>${ic('chevD')}</button>`;
   const fa=acc(st.from),ta=acc(st.to);const cx=fa&&ta&&fa.currency!==ta.currency&&+st.amt>0;
-  return {top:hdr('Transfer Between Accounts',{center:true}),html:`<div class="pad stack"><div class="card">${sel('from','FROM ACCOUNT')}<div style="text-align:center"><span class="ic green" style="width:28px;height:28px;border-radius:50%;margin:4px auto">${ic('down',2)}</span></div>${sel('to','TO ACCOUNT')}</div>
-   <div class="card" style="text-align:center"><span class="tiny muted b">AMOUNT</span><div class="row" style="justify-content:center"><span class="muted" style="font-size:calc(20px*var(--fs))">${esc(sym(fa?fa.currency:S.settings.base))}</span><input id="tr_amt" inputmode="decimal" placeholder="0.00" value="${esc(st.amt)}" data-in="trf" data-k="amt" style="border:0;background:transparent;font-size:calc(30px*var(--fs));font-weight:800;width:60%;text-align:left"></div>${cx?`<div class="small green">≈ ${money(conv(+st.amt,fa.currency,ta.currency),ta.currency)} at ${rateOf(fa.currency,ta.currency).toFixed(4)}</div>`:''}</div>
+  return {top:hdr(st.edit?'Edit Transfer':'Transfer Between Accounts',{center:true}),html:`<div class="pad stack"><div class="card">${sel('from','FROM ACCOUNT')}<div style="text-align:center"><span class="ic green" style="width:28px;height:28px;border-radius:50%;margin:4px auto">${ic('down',2)}</span></div>${sel('to','TO ACCOUNT')}</div>
+   <div class="card" style="text-align:center"><span class="tiny muted b">AMOUNT</span><div class="row" style="justify-content:center"><span class="muted" style="font-size:calc(20px*var(--fs))">${esc(sym(fa?fa.currency:S.settings.base))}</span><input id="tr_amt" inputmode="decimal" placeholder="0.00" value="${esc(st.amt)}" data-in="trf" data-k="amt" style="border:0;background:transparent;font-size:calc(30px*var(--fs));font-weight:800;width:60%;text-align:left"></div>${cx&&!(+st.rate>0)?`<div class="small green">≈ ${money(conv(+st.amt,fa.currency,ta.currency),ta.currency)} at ${rateOf(fa.currency,ta.currency).toFixed(4)}</div>`:''}</div>
+   ${fa&&ta&&fa.currency!==ta.currency?(()=>{const dir=trDir(st,fa,ta);const A=dir==='rev'?ta.currency:fa.currency,Bc=dir==='rev'?fa.currency:ta.currency;const app=rateOf(A,Bc);const v=+st.amt||0;const r=trRate(st,fa,ta);
+     const appAmt=round2(conv(v,fa.currency,ta.currency)),real=r?round2(v*r):0,diff=round2(real-appAmt);
+     return `<div class="card stack s8"><div><b class="small">Exchange rate (optional)</b><div class="tiny muted">Use the rate from your bank statement. It applies to this transfer only.</div></div>
+     <div class="fxrow"><span class="small">1</span><button class="chip soft on" data-a="trdir" aria-label="Swap currencies">${A} ⇄</button><span class="small">=</span><input id="tr_rate" inputmode="decimal" placeholder="${app.toFixed(4)}" value="${esc(st.rate)}" data-in="trf" data-k="rate"><b class="small">${Bc}</b></div>
+     <div class="fld" style="margin:0"><label for="tr_recv">Amount received in ${esc(ta.name)} (${ta.currency})</label><input id="tr_recv" inputmode="decimal" placeholder="${v?appAmt.toFixed(2):'0.00'}" value="${esc(st.recv)}" data-in="trf" data-k="recv"></div>
+     ${r&&v?`<div class="stack" style="gap:4px"><div class="between tiny"><span class="muted">At app rate (1 ${A} = ${app.toFixed(4)} ${Bc})</span><b class="num">${money(appAmt,ta.currency)}</b></div>
+       <div class="between tiny"><span class="muted">At your rate</span><b class="num">${money(real,ta.currency)}</b></div>
+       ${Math.abs(diff)>=0.01?`<div class="between small" style="border-top:1px solid var(--line);padding-top:6px"><span class="${diff>0?'green':'red'}">Exchange ${diff>0?'gain':'loss'}</span><b class="num ${diff>0?'green':'red'}">${diff>0?'+':'−'}${money(Math.abs(diff),ta.currency)}</b></div><span class="tiny muted">Recorded as ${diff>0?'income':'an expense'} ("Exchange ${diff>0?'Gain':'Loss'}") in ${esc(ta.name)}.</span>`:''}</div>`:''}</div>`})():''}
    <div class="card stack s8"><label class="row">${ic('receipt')}<input id="tr_fee" inputmode="decimal" placeholder="Transfer Fee (Optional)" value="${esc(st.fee)}" data-in="trf" data-k="fee" style="border:0;background:transparent;flex:1;padding:8px 0"></label>
    <label class="row" style="border-top:1px solid var(--line);padding-top:8px">${ic('cal')}<input type="date" id="tr_date" value="${st.date}" data-ch="trdate" style="border:0;background:transparent;flex:1;padding:8px 0"></label>
    <label class="row" style="border-top:1px solid var(--line);padding-top:8px">${ic('note')}<input id="tr_note" placeholder="Note (Optional)" value="${esc(st.note)}" data-in="trf" data-k="note" style="border:0;background:transparent;flex:1;padding:8px 0"></label></div></div>`,
-   bottom:`<div class="bottombar pad"><div class="stack s8"><button class="btn w" data-a="trsave">Transfer Transactions</button><button class="textbtn" style="color:var(--muted)" data-a="trcancel">Cancel</button></div></div>`,fab:false};
+   bottom:`<div class="bottombar pad"><div class="stack s8"><button class="btn w" data-a="trsave">${st.edit?'Save Changes':'Transfer Transactions'}</button><button class="textbtn" style="color:var(--muted)" data-a="trcancel">Cancel</button></div></div>`,fab:false};
 };
-A.trpick=el=>{const k=el.dataset.k;listPicker(k==='from'?'From Account':'To Account',S.accounts.filter(a=>a.id!==(k==='from'?U.tr.to:U.tr.from)).map(a=>({v:a.id,l:a.name,sub:money(accBal(a),a.currency),icon:ic('wallet')})),v=>{U.tr[k]=v;render()},{sel:U.tr[k]})};
-A.trf=el=>{U.tr[el.dataset.k]=el.value;if(el.dataset.k==='amt')render()};A.trdate=el=>{U.tr.date=el.value};
+A.trpick=el=>{const k=el.dataset.k;listPicker(k==='from'?'From Account':'To Account',S.accounts.filter(a=>a.id!==(k==='from'?U.tr.to:U.tr.from)).map(a=>({v:a.id,l:a.name,sub:money(accBal(a),a.currency),icon:ic('wallet')})),v=>{if(U.tr[k]!==v){U.tr.rate='';U.tr.recv='';U.tr.dir=null}U.tr[k]=v;render()},{sel:U.tr[k]})};
+A.trf=el=>{const st=U.tr,k=el.dataset.k;st[k]=el.value;const fa=acc(st.from),ta=acc(st.to);const cx=fa&&ta&&fa.currency!==ta.currency;
+  if(cx){const v=parseFloat(st.amt);if(k==='rate'||k==='amt'){const r=trRate(st,fa,ta);st.recv=r&&v>0?String(round2(v*r)):''}
+    else if(k==='recv'){const rv=parseFloat(st.recv);if(rv>0&&v>0){const r=rv/v;st.rate=String(+(trDir(st,fa,ta)==='rev'?1/r:r).toFixed(6))}else st.rate=''}}
+  if(k!=='note'&&k!=='fee')render()};
+/* rate typed by the user, always returned as "to-currency per 1 from-currency" */
+function trDir(st,fa,ta){return st.dir||(fxStrong(fa.currency,ta.currency)?'fwd':'rev')}
+function trRate(st,fa,ta){const v=parseFloat(st.rate);if(!(v>0))return 0;return trDir(st,fa,ta)==='rev'?1/v:v}
+A.trdir=()=>{const st=U.tr,fa=acc(st.from),ta=acc(st.to);const d=trDir(st,fa,ta);st.dir=d==='rev'?'fwd':'rev';const v=parseFloat(st.rate);if(v>0)st.rate=String(+(1/v).toFixed(6));render()};A.trdate=el=>{U.tr.date=el.value};
 A.trcancel=()=>{U.tr=null;back()};
 A.trsave=()=>{const st=U.tr;const v=parseFloat(st.amt);if(!st.from||!st.to){toast('Choose both accounts',true);return}if(st.from===st.to){toast('Choose two different accounts',true);return}if(!(v>0)){toast('Enter an amount above zero',true);return}
-  doTransfer(st.from,st.to,v,parseFloat(st.fee)||0,st.date,st.note);U.tr=null;NAV.pop();if(cur().n!=='transfers')NAV.push({n:'transfers',p:{}});commit('Transfer completed successfully')};
+  const fa=acc(st.from),ta=acc(st.to);const r=fa&&ta&&fa.currency!==ta.currency?trRate(st,fa,ta):0;const edit=st.edit;
+  if(edit)S.txns=S.txns.filter(t=>t.group!==edit);
+  doTransfer(st.from,st.to,v,parseFloat(st.fee)||0,st.date,st.note,{rate:r,dir:fa&&ta?trDir(st,fa,ta):'fwd',group:edit||null,time:edit?st.time:null});U.tr=null;NAV.pop();if(cur().n!=='transfers')NAV.push({n:'transfers',p:{}});commit(edit?'Transfer updated':'Transfer completed successfully')};
 
 /* ---------------- SMS automation ---------------- */
 const BANK_SENDERS=/\b(BOC|COMBANK|COM ?BANK|HNB|SAMPATH|NDB|SEYLAN|NTB|NATIONS ?TRUST|DFCC|PEOPLES|PEOPLE'?S BANK|PAN ASIA|UNION ?BANK|AMANA|CARGILLS ?BANK|NSB|HSBC|SCB|CITI|BML|MIB|SBI|HDFC|ICICI|AXIS|HBL|MCB|UBL|MEEZAN)\b/i;
@@ -1863,7 +1891,7 @@ SCR.planOverview=()=>{const L=S.plans.slice().sort((a,b)=>b.month.localeCompare(
   const pl=L.find(x=>x.id===U.ovPlan)||L.find(x=>x.month===ym(today()))||L[0];const f=monthStart(pl.month),t=monthEnd(pl.month);
   const rows=[];
   pl.expenses.forEach(x=>{const act=sum(S.txns.filter(q=>q.type==='expense'&&inRange(q,f,t)&&catAndSubs(x.catId).includes(q.catId)),tBase);rows.push({name:cat(x.catId)?.name||'Category',icon:cat(x.catId)?.icon||'📦',plan:x.amount,act,sec:'Categories'})});
-  pl.loans.forEach(x=>{const l=S.loans.find(y=>y.id===x.loanId);const act=l?sum(l.payments.filter(q=>inRange(q,f,t)),q=>conv(q.amount,lcur(l),S.settings.base)):0;rows.push({name:l?l.name:'Loan',icon:'🏦',plan:x.amount,act,sec:'Loan Payments'})});
+  pl.loans.forEach(x=>{const l=S.loans.find(y=>y.id===x.loanId);const act=l?sum(l.payments.filter(q=>inRange(q,f,t)),q=>lconv(l,q.amount,lcur(l),S.settings.base)):0;rows.push({name:l?l.name:'Loan',icon:'🏦',plan:x.amount,act,sec:'Loan Payments'})});
   pl.cards.forEach(x=>{const c=acc(x.accId);const act=sum(S.txns.filter(q=>q.accId===x.accId&&q.kind==='transfer_in'&&inRange(q,f,t)),tBase);rows.push({name:c?c.name:'Card',icon:'💳',plan:x.amount,act,sec:'Credit Card Payments'})});
   pl.goals.forEach(x=>{const g=S.goals.find(y=>y.id===x.goalId);const act=g?sum(g.contributions.filter(q=>inRange(q,f,t)&&q.amount>0),q=>q.amount):0;rows.push({name:g?g.name:'Goal',icon:g?.icon||'🎯',plan:x.amount,act,sec:'Saving Goals'})});
   const tot=planTotal(pl),act=sum(rows,r=>r.act);const secs=[...new Set(rows.map(r=>r.sec))];
@@ -2121,11 +2149,17 @@ function loanForm(id){const l=id?S.loans.find(x=>x.id===id):null;const locked=l&
    <div class="g2"><div class="fld"><label for="ln_p">Loan amount (${sy})</label><input id="ln_p" inputmode="decimal" value="${esc(st.principal)}" data-in="lni" data-k="principal" data-r="1"></div><div class="fld"><label for="ln_r">Interest rate (% / year)</label><input id="ln_r" inputmode="decimal" placeholder="0" value="${esc(st.rate)}" data-in="lni" data-k="rate" data-r="1"></div></div>
    <div class="g2"><div class="fld"><label for="ln_m">Tenure (months)${+st.rate>0?'':' · optional'}</label><input id="ln_m" inputmode="numeric" placeholder="${+st.rate>0?'e.g. 24':'Not set'}" value="${esc(st.months)}" data-in="lni" data-k="months" data-r="1"></div><div class="fld"><label for="ln_s">${+st.months?'First instalment':'Start date'}</label><input type="date" id="ln_s" value="${st.start}" data-ch="lni" data-k="start"></div></div>
    ${e?`<div class="card tight between small"><span class="muted">Monthly instalment</span><b class="green num">${money(e,st.currency)}</b></div>`:''}
-   ${st.currency!==S.settings.base&&P?`<span class="tiny green">≈ ${B(conv(P,st.currency,S.settings.base))} at 1 ${st.currency} = ${rateOf(st.currency,S.settings.base).toFixed(4)} ${S.settings.base}</span>`:''}
-   ${l?'':`${accChips(st.accId,'lnacc',{title:'Money received into (optional)',noAdd:true})}<span class="tiny muted">Selecting an account records the loan amount as money in${st.accId&&accCur(st.accId)!==st.currency&&P?` (${money(conv(P,st.currency,accCur(st.accId)),accCur(st.accId))})`:''}.</span>`}
+   ${(()=>{const curs=[...new Set([S.settings.base,...S.accounts.map(a=>a.currency)])].filter(c=>c&&c!==st.currency);if(!curs.length)return '';const tmp={currency:st.currency,rates:loanRatesFromSt(st)};
+     return `<div class="card stack s8"><div><b class="small">Agreed exchange rates (optional)</b><div class="tiny muted">The rate agreed for this loan. Payments and the liability use it instead of the app rate — only for this loan.</div></div>
+     ${curs.map(c=>{const r=st.rates[c]||{};const inv=r.inv!=null?r.inv:!fxStrong(st.currency,c);const A=inv?c:st.currency,Bc=inv?st.currency:c;return `<div class="fxrow"><span class="small">1</span><button class="chip soft on" data-a="lnrdir" data-c="${c}" aria-label="Swap currencies">${A} ⇄</button><span class="small">=</span><input inputmode="decimal" id="lnr_${c}" placeholder="${rateOf(A,Bc).toFixed(4)}" value="${esc(r.v||'')}" data-in="lnrate" data-c="${c}" data-r="1"><b class="small">${Bc}</b></div>`}).join('')}
+     ${P&&st.currency!==S.settings.base?`<span class="tiny green">≈ ${B(lconv(tmp,P,st.currency,S.settings.base))} at 1 ${st.currency} = ${lconv(tmp,1,st.currency,S.settings.base).toFixed(4)} ${S.settings.base}${tmp.rates[S.settings.base]?' (agreed rate)':''}</span>`:''}</div>`})()}
+   ${l?'':`${accChips(st.accId,'lnacc',{title:'Money received into (optional)',noAdd:true})}<span class="tiny muted">Selecting an account records the loan amount as money in${st.accId&&accCur(st.accId)!==st.currency&&P?` (${money(lconv({currency:st.currency,rates:loanRatesFromSt(st)},P,st.currency,accCur(st.accId)),accCur(st.accId))})`:''}.</span>`}
    ${st.err?`<span class="err">${st.err}</span>`:''}<div class="btns"><button class="btn out" data-a="close">Cancel</button><button class="btn" data-a="lnsave">Save</button></div>`},
-   {id,type:l?l.type:'bank',name:l?l.name:'',lender:l?l.lender:'',currency:l?lcur(l):S.settings.base,principal:l?String(l.principal):'',rate:l?String(l.rate||''):'',months:l?String(+l.months||''):'12',start:l?l.start:addMonths(today(),1),accId:null},{full:true});
+   {id,type:l?l.type:'bank',name:l?l.name:'',lender:l?l.lender:'',currency:l?lcur(l):S.settings.base,principal:l?String(l.principal):'',rate:l?String(l.rate||''):'',months:l?String(+l.months||''):'12',start:l?l.start:addMonths(today(),1),accId:null,rates:l&&l.rates?Object.fromEntries(Object.entries(l.rates).map(([c,v])=>{const inv=(l.rateDir||{})[c]??!fxStrong(lcur(l),c);return [c,{inv,v:String(+(inv?1/v:v).toFixed(6))}]})):{}},{full:true});
 }
+function loanRatesFromSt(st){const o={};for(const [c,r] of Object.entries(st.rates||{})){const v=parseFloat(r.v);if(v>0){const inv=r.inv!=null?r.inv:!fxStrong(st.currency,c);o[c]=inv?1/v:v}}return o}
+A.lnrate=el=>{const st=topSheet().st;const c=el.dataset.c;const r=st.rates[c]=st.rates[c]||{};if(r.inv==null)r.inv=!fxStrong(st.currency,c);r.v=el.value;rs()};
+A.lnrdir=el=>{const st=topSheet().st;const c=el.dataset.c;const r=st.rates[c]=st.rates[c]||{};const inv=r.inv!=null?r.inv:!fxStrong(st.currency,c);const v=parseFloat(r.v);r.inv=!inv;if(v>0)r.v=String(+(1/v).toFixed(6));rs()};
 A.lnf=el=>{const st=topSheet().st;st[el.dataset.k]=el.dataset.v;if(el.dataset.k==='type'&&el.dataset.v==='personal'&&st.months==='12'&&!+st.rate)st.months='';rs()};
 A.lni=el=>{topSheet().st[el.dataset.k]=el.value;topSheet().st.err='';if(el.dataset.r)rs()};
 A.lncur=()=>{const st=topSheet().st;currencyPicker(st.currency,c=>{st.currency=c;rs()},'Loan Currency')};
@@ -2133,13 +2167,13 @@ A.lnacc=el=>{const st=topSheet().st;st.accId=st.accId===el.dataset.id?null:el.da
 A.lnsave=()=>{const st=topSheet().st;const P=parseFloat(st.principal),rate=parseFloat(st.rate)||0,m=parseInt(st.months)||0;
   if(!st.name.trim()){st.err='Enter a loan name.';rs();return}if(!(P>0)){st.err='Enter the loan amount.';rs();return}
   if(rate>0&&!(m>0)){st.err='Enter the tenure in months to calculate interest.';rs();return}
-  const f={name:st.name.trim(),type:st.type,lender:st.lender,currency:st.currency,principal:P,rate,months:m,start:st.start};
+  const f={name:st.name.trim(),type:st.type,lender:st.lender,currency:st.currency,principal:P,rate,months:m,start:st.start,rates:loanRatesFromSt(st),rateDir:Object.fromEntries(Object.entries(st.rates||{}).filter(([c,r])=>parseFloat(r.v)>0).map(([c,r])=>[c,r.inv!=null?r.inv:!fxStrong(st.currency,c)]))};
   if(st.id){const l=S.loans.find(x=>x.id===st.id);const oldP=+l.principal,oldCur=lcur(l);const rt=loanRecvTx(l);Object.assign(l,f);
-    if(rt){const ac=accCur(rt.accId);const amt=ac===f.currency?P:(oldCur===f.currency&&oldP>0?round2(+rt.amount*P/oldP):round2(conv(P,f.currency,ac)));
+    if(rt){const ac=accCur(rt.accId);const amt=ac===f.currency?P:(l.rates&&l.rates[ac]?round2(lconv(l,P,f.currency,ac)):oldCur===f.currency&&oldP>0?round2(+rt.amount*P/oldP):round2(conv(P,f.currency,ac)));
       Object.assign(rt,{who:l.name,amount:amt,note:'Loan received: '+l.name+(f.currency!==ac?` (${money(P,f.currency)})`:''),link:{loan:l.id}})}
     closeSheet();commit('Loan updated');return}
   const l={id:uid(),...f,accId:st.accId,payments:[]};S.loans.push(l);
-  if(st.accId)S.txns.push({id:uid(),type:'income',kind:'loan_receive',who:l.name,accId:st.accId,amount:round2(conv(P,st.currency,accCur(st.accId))),date:today(),time:nowTime(),note:'Loan received: '+l.name+(st.currency!==accCur(st.accId)?` (${money(P,st.currency)})`:''),tags:[],link:{loan:l.id}});
+  if(st.accId)S.txns.push({id:uid(),type:'income',kind:'loan_receive',who:l.name,accId:st.accId,amount:round2(lconv(l,P,st.currency,accCur(st.accId))),date:today(),time:nowTime(),note:'Loan received: '+l.name+(st.currency!==accCur(st.accId)?` (${money(P,st.currency)})`:''),tags:[],link:{loan:l.id}});
   closeSheet();commit('Loan added')};
 SCR.loan=p=>{const l=S.loans.find(x=>x.id===p.id);if(!l)return SCR.loans();const c=lcur(l),M=x=>money(x,c);const r=loanRemain(l),tot=loanTotal(l),paid=loanPaid(l),e=emiOf(l),hasT=+l.months>0;
   const rows=[];if(hasT){let bal=+l.principal;const rr=(+l.rate||0)/1200;for(let k=1;k<=+l.months;k++){const it=bal*rr,pr=e-it;bal=Math.max(0,bal-pr);rows.push({k,d:addMonths(l.start,k-1),it,pr,bal})}}
@@ -2147,37 +2181,39 @@ SCR.loan=p=>{const l=S.loans.find(x=>x.id===p.id);if(!l)return SCR.loans();const
   return {top:hdr(esc(l.name),{right:`<span class="badge ${r>0?'green':''}">${l.type==='bank'?'BANK':'PERSONAL'}</span>`+rbtn('loanmenu','more',`data-id="${l.id}"`,'Options')}),
    html:`<div class="pad stack"><div class="card glow"><div class="between"><b style="font-size:calc(17px*var(--fs))">${esc(l.name)}</b><span class="badge ${od?'red':r>0?'green':'blue'}">● ${od?'OVERDUE':r>0?'ACTIVE':'PAID'}</span></div>${od?`<div class="tiny red" style="margin-top:6px">Instalment #${od.k} was due ${fD(od.d)} · ${od.days} day${od.days>1?'s':''} overdue</div>`:''}<div class="small muted" style="margin-top:8px">Remaining Balance</div><div class="big green num">${M(r)}</div>${c!==S.settings.base?`<div class="small muted num">≈ ${B(loanRemainB(l))}</div>`:''}${prog(paid/tot,'b')}<div class="tiny muted" style="margin-top:6px">${Math.round(paid/tot*100)}% repaid</div></div>
    <div class="g2"><div class="card"><span class="ic green">${ic('money')}</span><div class="tiny muted" style="margin-top:8px">Amount Paid</div><b class="green num">${M(paid)}</b></div><div class="card"><span class="ic blue">${ic('trend')}</span><div class="tiny muted" style="margin-top:8px">${hasT?'Monthly EMI':'Tenure'}</div><b class="num">${hasT?M(e):'Not set'}</b></div></div>
-   <div class="card"><b class="row">${ic('info')} Loan Information</b>${[['Lender',l.lender||'—'],['Currency',c+' — '+(CURM[c]?.name||'')],['Original Amount',M(l.principal)],['Interest Rate',(l.rate||0)+'% per year'],...(hasT?[['Tenure',l.months+' months'],['Total Payable',M(tot)],['Total Interest',M(tot-l.principal)],['First Instalment',fD(l.start)],['Instalments Paid',`${nPaid} of ${l.months}`]]:[['Start date',fD(l.start)]])].map(([a,b])=>`<div class="kv"><span>${a}</span><b>${b}</b></div>`).join('')}</div>
+   <div class="card"><b class="row">${ic('info')} Loan Information</b>${[['Lender',l.lender||'—'],['Currency',c+' — '+(CURM[c]?.name||'')],...Object.entries(l.rates||{}).map(([k,v])=>{const inv=(l.rateDir||{})[k]??!fxStrong(c,k);return ['Agreed rate',inv?`1 ${k} = ${(1/v).toFixed(4)} ${c}`:`1 ${c} = ${(+v).toFixed(4)} ${k}`]}),['Original Amount',M(l.principal)],['Interest Rate',(l.rate||0)+'% per year'],...(hasT?[['Tenure',l.months+' months'],['Total Payable',M(tot)],['Total Interest',M(tot-l.principal)],['First Instalment',fD(l.start)],['Instalments Paid',`${nPaid} of ${l.months}`]]:[['Start date',fD(l.start)]])].map(([a,b])=>`<div class="kv"><span>${a}</span><b>${b}</b></div>`).join('')}</div>
    ${r>0&&rows[nPaid]?`<div class="card"><b>Upcoming schedule</b>${rows.slice(nPaid,nPaid+6).map(x=>`<div class="kv ${x.d<today()?'od':''}"><span>#${x.k} · ${fD(x.d)}${x.d<today()?' <span class="badge red" style="font-size:calc(9px*var(--fs))">OVERDUE</span>':''}<div class="tiny muted">Interest ${M(x.it)} · Principal ${M(x.pr)}</div></span><b class="num">${M(e)}</b></div>`).join('')}</div>`:''}
    <span class="h2">Payment History</span>${l.payments.length?`<div class="card">${l.payments.slice().reverse().map(x=>`<div class="kv"><span>${fD(x.date)}${x.note?`<div class="tiny muted">${esc(x.note)}</div>`:''}${x.payCur&&x.payCur!==c?`<div class="tiny muted">Paid ${money(x.paid,x.payCur)} at 1 ${x.payCur} = ${(+x.rate).toFixed(4)} ${c}</div>`:''}</span><span class="row" style="gap:4px;align-items:flex-start"><b class="num green" style="text-align:right">${M(x.amount)}${x.fee?`<div class="tiny red">+ fee ${money(x.fee,x.payCur||c)}</div>`:''}</b><button class="ib" style="margin:-8px -10px 0 0" data-a="lnpaymenu" data-id="${l.id}" data-p="${x.id}" aria-label="Payment options">${ic('more')}</button></span></div>`).join('')}</div>`:`<div class="card small muted">No payments yet.</div>`}</div>`,
    bottom:r>0?`<div class="bottombar pad"><div><button class="btn w ${od?'overdue':''}" data-a="loanpay" data-id="${l.id}">${ic('card')} ${od?'PAY NOW - OVERDUE':'Pay now'}</button></div></div>`:'',fab:false};
 };
 A.loanmenu=el=>{const id=el.dataset.id;openMenu(el,[{l:'Edit loan',i:'edit',a:()=>loanForm(id)},{l:'Delete loan',i:'trash',red:true,a:()=>confirmDel('Delete loan?','The loan, the loan received transaction and all its repayment transactions are removed, and your account balances are updated.',()=>{const l=S.loans.find(x=>x.id===id);if(l)removeLoan(l);back();commit('Loan deleted')})}])};
 /* Settlement sheet shared by loans (pay) and lendings (receive): pick any currency, see it converted into the loan's currency */
-function settleBox(st,owedCur){const v=parseFloat(st.amt)||0;const cv=conv(v,st.cur,owedCur);
+/* "1 A = [rate] B" — strongest currency first by default; the swap button flips which currency is quoted */
+function fxStrong(a,b){return rateOf(a,b)>=1}
+function settleBox(st,owedCur){const v=parseFloat(st.amt)||0;const L=st.lid&&S.loans.find(x=>x.id===st.lid);const cv=L?lconv(L,v,st.cur,owedCur):conv(v,st.cur,owedCur);
   return `<div class="between"><span class="tiny muted b">AMOUNT</span><button class="chip soft on" data-a="setcur" aria-label="Payment currency">${esc(sym(st.cur))} ${st.cur} ▾</button></div>
    <label class="row"><span class="muted" style="font-size:calc(18px*var(--fs))">${esc(sym(st.cur))}</span><input id="st_amt" inputmode="decimal" placeholder="0.00" value="${esc(st.amt)}" data-in="setamt" style="border:0;background:transparent;font-size:calc(28px*var(--fs));font-weight:800;flex:1;min-width:0"></label>
-   ${st.cur!==owedCur&&v>0?`<span class="tiny green">= ${money(cv,owedCur)} off the balance · 1 ${st.cur} = ${rateOf(st.cur,owedCur).toFixed(4)} ${owedCur}</span>`:''}`}
-A.setcur=()=>{const st=topSheet().st;currencyPicker(st.cur,c=>{const v=parseFloat(st.amt);if(v>0)st.amt=String(round2(conv(v,st.cur,c)));st.cur=c;rs()},'Settlement Currency')};
+   ${st.cur!==owedCur&&v>0?`<span class="tiny green">= ${money(cv,owedCur)} off the balance · ${L&&(L.rates||{})[st.cur===lcur(L)?owedCur:st.cur]?'agreed loan rate ':''}${fxStrong(st.cur,owedCur)?`1 ${st.cur} = ${(L?lconv(L,1,st.cur,owedCur):rateOf(st.cur,owedCur)).toFixed(4)} ${owedCur}`:`1 ${owedCur} = ${(L?lconv(L,1,owedCur,st.cur):rateOf(owedCur,st.cur)).toFixed(4)} ${st.cur}`}</span>`:''}`}
+A.setcur=()=>{const st=topSheet().st;const L=st.lid&&S.loans.find(x=>x.id===st.lid);currencyPicker(st.cur,c=>{const v=parseFloat(st.amt);if(v>0)st.amt=String(round2(L?lconv(L,v,st.cur,c):conv(v,st.cur,c)));st.cur=c;rs()},'Settlement Currency')};
 A.setamt=el=>{topSheet().st.amt=el.value;topSheet().st.err='';rs()};
 A.loanpay=el=>{const l=S.loans.find(x=>x.id===el.dataset.id);const c=lcur(l);const due=+l.months>0?Math.min(emiOf(l),loanRemain(l)):loanRemain(l);
   openSheet(st=>`<div class="sh"><div><h3>Pay now</h3><span class="small muted">Record a payment for this loan · balance ${money(loanRemain(l),c)}</span></div><button class="ib" data-a="close" aria-label="Close">${ic('x')}</button></div>
    ${settleBox(st,c)}<span class="tiny muted">${+l.months>0?'Monthly instalment '+money(emiOf(l),c):'Remaining balance '+money(loanRemain(l),c)}</span>
    <span class="tiny muted b">BANK FEE (OPTIONAL, ${st.cur})</span><div class="fld"><input id="lp_fee" inputmode="decimal" placeholder="0.00" value="${esc(st.fee)}" data-in="lpf" data-k="fee"></div>
    <span class="tiny muted b">PAY FROM WALLET:</span>${walletCards(st.accId,'lpacc')}
-   ${st.accId&&accCur(st.accId)!==st.cur&&+st.amt?`<span class="tiny muted">${money(conv(+st.amt,st.cur,accCur(st.accId)),accCur(st.accId))} will be taken from ${esc(accName(st.accId))}.</span>`:''}
+   ${st.accId&&accCur(st.accId)!==st.cur&&+st.amt?`<span class="tiny muted">${money(lconv(l,+st.amt,st.cur,accCur(st.accId)),accCur(st.accId))} will be taken from ${esc(accName(st.accId))}.</span>`:''}
    <div class="card"><span class="tiny muted b">PAYMENT DATE</span><input type="date" id="lp_d" value="${st.date}" data-ch="lpf" data-k="date" style="width:100%;border:0;background:transparent;padding:6px 0"><span class="tiny muted b">NOTE</span><input id="lp_n" value="${esc(st.note)}" data-in="lpf" data-k="note" style="width:100%;border:0;background:transparent;padding:6px 0"></div>
-   ${st.err?`<span class="err">${st.err}</span>`:''}<button class="btn w" data-a="lpok">Make Payment</button>`,{id:l.id,cur:c,amt:due.toFixed(2),fee:'',accId:defaultAcc(),date:today(),note:'Loan payment - '+l.name})};
+   ${st.err?`<span class="err">${st.err}</span>`:''}<button class="btn w" data-a="lpok">Make Payment</button>`,{id:l.id,lid:l.id,cur:c,amt:due.toFixed(2),fee:'',accId:defaultAcc(),date:today(),note:'Loan payment - '+l.name})};
 A.lpf=el=>{topSheet().st[el.dataset.k]=el.value};
-A.lpacc=el=>{const st=topSheet().st;st.accId=el.dataset.id;const ac=accCur(st.accId),v=parseFloat(st.amt);if(ac!==st.cur){if(v>0)st.amt=String(round2(conv(v,st.cur,ac)));st.cur=ac}rs()};
+A.lpacc=el=>{const st=topSheet().st;st.accId=el.dataset.id;const L=S.loans.find(x=>x.id===st.id);const ac=accCur(st.accId),v=parseFloat(st.amt);if(ac!==st.cur){if(v>0)st.amt=String(round2(L?lconv(L,v,st.cur,ac):conv(v,st.cur,ac)));st.cur=ac}rs()};
 A.lpok=()=>{const st=topSheet().st;const l=S.loans.find(x=>x.id===st.id);const c=lcur(l);const v=parseFloat(st.amt),fee=parseFloat(st.fee)||0;if(!(v>0)){st.err='Enter an amount above zero.';rs();return}if(!st.accId){st.err='Choose a wallet.';rs();return}
-  const ac=accCur(st.accId);const t1={id:uid(),type:'expense',kind:'loan_pay',who:l.name,accId:st.accId,amount:round2(conv(v,st.cur,ac)),date:st.date,time:nowTime(),note:st.note,tags:[]};S.txns.push(t1);
-  const feeId=fee?uid():null;if(fee)S.txns.push({id:feeId,type:'expense',kind:'bank_fee',who:l.name,catId:S.categories.find(x=>x.name==='Bank Charges')?.id,accId:st.accId,amount:round2(conv(fee,st.cur,ac)),date:st.date,time:nowTime(),note:'Bank fee for loan payment',tags:[]});
-  l.payments.push({id:uid(),amount:round2(conv(v,st.cur,c)),paid:v,payCur:st.cur,rate:rateOf(st.cur,c),fee,date:st.date,accId:st.accId,note:st.note,txId:t1.id,feeTxId:feeId});closeSheet();commit(loanRemain(l)<=0?'Loan fully paid':'Payment recorded')};
+  const ac=accCur(st.accId);const t1={id:uid(),type:'expense',kind:'loan_pay',who:l.name,accId:st.accId,amount:round2(lconv(l,v,st.cur,ac)),date:st.date,time:nowTime(),note:st.note,tags:[]};S.txns.push(t1);
+  const feeId=fee?uid():null;if(fee)S.txns.push({id:feeId,type:'expense',kind:'bank_fee',who:l.name,catId:S.categories.find(x=>x.name==='Bank Charges')?.id,accId:st.accId,amount:round2(lconv(l,fee,st.cur,ac)),date:st.date,time:nowTime(),note:'Bank fee for loan payment',tags:[]});
+  l.payments.push({id:uid(),amount:round2(lconv(l,v,st.cur,c)),paid:v,payCur:st.cur,rate:lconv(l,1,st.cur,c),fee,date:st.date,accId:st.accId,note:st.note,txId:t1.id,feeTxId:feeId});closeSheet();commit(loanRemain(l)<=0?'Loan fully paid':'Payment recorded')};
 /* edit / delete a repayment from inside the loan */
 const lnFeeTx=(l,p)=>p.feeTxId?S.txns.find(t=>t.id===p.feeTxId):S.txns.find(t=>t.kind==='bank_fee'&&t.who===l.name&&t.date===p.date&&t.accId===p.accId&&t.note==='Bank fee for loan payment');
 A.lnpaymenu=el=>{const l=S.loans.find(x=>x.id===el.dataset.id);const pid=el.dataset.p;openMenu(el,[{l:'Edit payment',i:'edit',a:()=>lnPayEdit(l.id,pid)},{l:'Delete payment',i:'trash',red:true,a:()=>confirmDel('Delete payment?','This payment, its transaction and any bank fee are removed. The loan balance goes back up.',()=>{const p=l.payments.find(y=>y.id===pid);if(!p)return;const f=lnFeeTx(l,p);l.payments=l.payments.filter(y=>y.id!==pid);S.txns=S.txns.filter(t=>t.id!==p.txId&&!(f&&t.id===f.id));commit('Payment deleted')})}])};
-function lnPayEdit(lid,pid){const l=S.loans.find(x=>x.id===lid);const p=l.payments.find(y=>y.id===pid);const c=lcur(l);const pc=p.payCur||c;const f=lnFeeTx(l,p);const tx=S.txns.find(t=>t.id===p.txId);
+function lnPayEdit(lid,pid){const l=S.loans.find(x=>x.id===lid);const rateOf=(a,b)=>lconv(l,1,a,b),conv=(v,a,b)=>lconv(l,v,a,b);const p=l.payments.find(y=>y.id===pid);const c=lcur(l);const pc=p.payCur||c;const f=lnFeeTx(l,p);const tx=S.txns.find(t=>t.id===p.txId);
   openSheet(st=>{const v=parseFloat(st.amt)||0;const ac=accCur(st.accId);return `<div class="sh"><div><h3>Edit payment</h3><span class="small muted">${esc(l.name)} · ${fD(p.date)}</span></div><button class="ib" data-a="close" aria-label="Close">${ic('x')}</button></div>
    <span class="tiny muted b">AMOUNT (${pc})</span><label class="row"><span class="muted" style="font-size:calc(18px*var(--fs))">${esc(sym(pc))}</span><input id="lpe_amt" inputmode="decimal" placeholder="0.00" value="${esc(st.amt)}" data-in="lpef" data-k="amt" style="border:0;background:transparent;font-size:calc(28px*var(--fs));font-weight:800;flex:1;min-width:0"></label>
    ${pc!==c&&v>0?`<span class="tiny green">= ${money(round2(v*(+p.rate||rateOf(pc,c))),c)} off the balance · 1 ${pc} = ${(+p.rate||rateOf(pc,c)).toFixed(4)} ${c}</span>`:''}
@@ -2189,7 +2225,7 @@ function lnPayEdit(lid,pid){const l=S.loans.find(x=>x.id===lid);const p=l.paymen
    {lid,pid,amt:String(p.paid!=null?p.paid:p.amount),fee:p.fee?String(p.fee):'',accId:(tx&&tx.accId)||p.accId||defaultAcc(),date:p.date,note:p.note||''})}
 A.lpef=el=>{const st=topSheet().st;st[el.dataset.k]=el.value;st.err='';if(el.dataset.k==='amt')rs()};
 A.lpeacc=el=>{topSheet().st.accId=el.dataset.id;rs()};
-A.lpesave=()=>{const st=topSheet().st;const l=S.loans.find(x=>x.id===st.lid);const p=l&&l.payments.find(y=>y.id===st.pid);if(!p){closeSheet();return}
+A.lpesave=()=>{const st=topSheet().st;const l=S.loans.find(x=>x.id===st.lid);const rateOf=(a,b)=>lconv(l,1,a,b),conv=(v,a,b)=>lconv(l,v,a,b);const p=l&&l.payments.find(y=>y.id===st.pid);if(!p){closeSheet();return}
   const v=parseFloat(st.amt),fee=parseFloat(st.fee)||0;if(!(v>0)){st.err='Enter an amount above zero.';rs();return}if(!st.accId){st.err='Choose a wallet.';rs();return}
   const c=lcur(l),pc=p.payCur||c,ac=accCur(st.accId),rate=pc===c?1:(+p.rate||rateOf(pc,c));const oldFee=lnFeeTx(l,p);
   Object.assign(p,{paid:v,payCur:pc,rate,amount:round2(pc===c?v:v*rate),fee,date:st.date,accId:st.accId,note:st.note});

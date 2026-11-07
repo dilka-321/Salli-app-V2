@@ -1,4 +1,4 @@
-const CACHE_NAME = 'salli-shell-v6';
+const CACHE_NAME = 'salli-shell-v7';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icons/salli.svg', './premium.css'];
 const OPTIONAL = ['./vendor/supabase.js', './vendor/fonts/fonts.css'];
 const SUPABASE_SDK = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
