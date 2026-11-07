@@ -96,3 +96,9 @@ cd android && ./gradlew assembleDebug
 - Editing a linked transaction no longer drops its loan / lending / FD link.
 
 **Dark mode is true black** (#000 background, dark-grey glass cards).
+
+## Version 1.9.2
+- **Offline changes are kept.** Fixed: when the app came back online it could replace data added offline with the older cloud copy. Now unsynced changes always stay on the phone and are uploaded; if the cloud copy changed on another device meanwhile, you're asked which to keep. Coming back online no longer reloads the screen.
+- **Sign-in screen** redesigned to look like part of the app: full colour background, large Salli logo, frosted form card and a big Sign in button.
+- **Spending Trend**: touch and drag across the chart — a line follows your finger with dots on each series and a dark value box (Income, Expense, Cash In, Cash Out and the date). Lines are now smooth curves.
+- **Due Soon card** on the dashboard (under SMS setup): loan instalments, money to receive, subscriptions, recurring payments and installments that are overdue or due within 7 days, e.g. "Payment overdue by 3 days". › opens the item, × hides that due. It can be moved or hidden in Customize Dashboard.

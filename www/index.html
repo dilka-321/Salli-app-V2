@@ -621,7 +621,7 @@ button,input,select,textarea{font-family:inherit}
 /* =================================================================
    Salli Money Manager — core: helpers, currencies, state, derived data
    ================================================================= */
-const APP_NAME='Salli', APP_VER='1.9.1';
+const APP_NAME='Salli', APP_VER='1.9.2';
 let KEY='salli.mm.v2';
 const KEY_BASE='salli.mm.v2';
 const NATIVE=!!(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform());
@@ -754,8 +754,8 @@ function save(){try{localStorage.setItem(KEY,JSON.stringify(S));if(cloudUser){cl
 const ASSET_GROUPS=['Cash','Bank','Lending','Fixed Assets','Saving Goals','Investment'];
 const LIAB_GROUPS=['Credit Card','Loan','Installment','Other Liability'];
 const DEF_GROUP={'Bank':'Bank','Cash':'Cash','Emergency Fund':'Saving Goals','Investment':'Investment','Fixed Deposit':'Investment','Gold':'Fixed Assets','Property':'Fixed Assets','Vehicle':'Fixed Assets','Lending':'Lending','Bank Loan':'Loan','Personal Loan':'Loan','Credit Card':'Credit Card','Installment Plan':'Installment'};
-const DEF_WIDGETS=['sms','balance','accounts','fds','recent','trend','budget','subs','inst','loan','expense','standing'];
-const WIDGET_NAMES={fds:'Fixed Deposits',sms:'SMS Automation',balance:'Balance Overview',accounts:'My Accounts',recent:'Recent Transactions',trend:'Spending Trend',budget:'Budget Progress',subs:'Upcoming Subscriptions',inst:'Installment Overview',loan:'Loan Overview',expense:'Expense Summary',standing:'Standing Orders'};
+const DEF_WIDGETS=['sms','dues','balance','accounts','fds','recent','trend','budget','subs','inst','loan','expense','standing'];
+const WIDGET_NAMES={dues:'Due Soon',fds:'Fixed Deposits',sms:'SMS Automation',balance:'Balance Overview',accounts:'My Accounts',recent:'Recent Transactions',trend:'Spending Trend',budget:'Budget Progress',subs:'Upcoming Subscriptions',inst:'Installment Overview',loan:'Loan Overview',expense:'Expense Summary',standing:'Standing Orders'};
 
 function baseState(){
   const exp=[['Rent','🏠'],['Electricity','⚡'],['Water','🚰'],['Gas','🔥'],['Garbage','🗑️'],['Groceries','🛒'],['Phone','☎️'],['Internet','📶'],['TV','📺'],['Domestic Help','🧹'],['Transport','🚕'],['Fuel','⛽'],['Vehicle','🚗'],['Parking','🅿️'],['Tuition','📖'],['Books','📚'],['Activities','🎨'],['Doctor','🩺'],['Meds','💊'],['Insurance','🛡️'],['Dental','🦷'],['Clothing','👕'],['Salon','💇'],['Gym','🏋️'],['Dining','🍕'],['Entertainment','🎭'],['Travel','✈️'],['Gifts','🎁'],['Education','🎓'],['Shopping','🛍️'],['Kids','🧸'],['Pets','🐾'],['Charity','🤲'],['Bank Charges','🏦'],['Other','📦']];
@@ -826,6 +826,7 @@ function salliMigrate(s){if(!s)return s;
   // one-time repair: loan/lending repayments whose transaction was already deleted from the transaction list
   if(s.settings&&!s.settings.linkFix1){const ids=new Set((s.txns||[]).map(t=>t.id));const keep=p=>!p.txId||ids.has(p.txId);
     (s.loans||[]).forEach(l=>{l.payments=l.payments.filter(keep)});(s.lendings||[]).forEach(l=>{l.payments=l.payments.filter(keep)});s.settings.linkFix1=true}
+  if(s.settings&&s.settings.widgets&&!s.settings.duesAdded){if(!s.settings.widgets.includes('dues')){const i=s.settings.widgets.indexOf('sms');s.settings.widgets.splice(i+1,0,'dues')}s.settings.duesAdded=true}
   if(s.settings&&!s.settings.linkFix2){const ids=new Set((s.txns||[]).map(t=>t.id));
     (s.subs||[]).forEach(x=>{if(!x.payments)return;for(let i=x.payments.length-1;i>=0;i--){const p=x.payments[i];if(p.txId&&!ids.has(p.txId)){const last=i===x.payments.length-1;x.payments.splice(i,1);if(last)x.next=p.prevNext||retreatDate(x.next,x.freq)}}});
     s.settings.linkFix2=true}
@@ -1369,6 +1370,7 @@ SCR.home=()=>{
     ${L.length?txGroups(L):`<div class="card">${emptyState('inbox','No transactions yet','Tap + to add your first income or expense')}</div>`}
     ${L.length?`<button class="btn out w" style="margin-top:12px" data-a="go" data-n="txns">See All Transactions</button>`:''}</section>`};
   W.trend=()=>trendCard(mk);
+  W.dues=()=>{const L=dueItems();if(!L.length)return '';return `<section class="card dues"><div class="dues-hd"><i></i>DUE SOON</div>${L.slice(0,6).map(d=>`<div class="dues-row"><i class="${d.days<0?'od':''}"></i><button class="grow dues-main" data-a="go" data-n="${d.scr}" data-p='{"id":"${d.id}"}'><span class="dues-name">${esc(d.name)}</span><span class="dues-amt">${d.amt}</span><span class="dues-when">${d.days<0?`Payment overdue by ${-d.days} day${d.days<-1?'s':''}`:d.days===0?'Due today':d.days===1?'Due tomorrow':`Due in ${d.days} days`}${d.kind?' · '+d.kind:''}</span></button><button class="ib" data-a="go" data-n="${d.scr}" data-p='{"id":"${d.id}"}' aria-label="Open">${ic('chevR')}</button><button class="ib" data-a="duehide" data-k="${esc(d.key)}" aria-label="Dismiss">${ic('x')}</button></div>`).join('')}${L.length>6?`<div class="tiny muted" style="padding:8px 18px 12px">+${L.length-6} more due</div>`:''}</section>`};
   W.budget=()=>{if(!S.budgets.length)return '';return `<section class="card stack s8"><div class="between"><span class="h2">Budget Progress</span><button class="link" data-a="tab" data-n="budget">View all</button></div>${S.budgets.slice(0,4).map(b=>{const sp=budgetSpent(b),p=sp/b.amount;return `<div class="stack" style="gap:4px"><div class="between small"><b>${esc(b.name)}</b><span class="num muted">${B(sp)} / ${B(b.amount)}</span></div>${prog(p,p>=1?'r':p>=.8?'o':'')}</div>`}).join('')}</section>`};
   W.subs=()=>{const L=S.subs.filter(x=>x.active!==false).sort((a,b)=>a.next.localeCompare(b.next)).slice(0,3);if(!L.length)return '';return `<section class="card stack s8"><div class="between"><span class="h2">Upcoming Subscriptions</span><button class="link" data-a="go" data-n="subs">View all</button></div>${L.map(x=>`<button class="row" style="text-align:left;padding:4px 0" data-a="go" data-n="sub" data-p='{"id":"${x.id}"}'><span class="ic red b">${esc(x.name[0])}</span><span class="grow"><b>${esc(x.name)}</b><div class="tiny ${x.next<today()?'red':'muted'}">${x.next<today()?'Overdue · ':''}${fD(x.next)}</div></span><b class="num">${money(x.amount,x.currency)}</b></button>`).join('')}</section>`};
   W.inst=()=>{const L=S.installments.filter(x=>instRemain(x)>0);if(!L.length)return '';const out=sum(L,instRemain);return `<button class="card click stack s8" data-a="go" data-n="installments"><div class="between"><span class="h2">Installment Overview</span><span class="link">View</span></div><div class="between"><span class="small muted">Total outstanding</span><b class="num">${B(out)}</b></div>${L.slice(0,2).map(x=>`<div class="between small"><span>${esc(x.title)} · next ${fD(instNext(x))}</span><b class="num">${B(x.amount)}</b></div>`).join('')}</button>`};
@@ -1382,6 +1384,16 @@ SCR.home=()=>{
   };
 };
 A.smsdismiss=()=>{S.settings.smsDismissed=true;commit()};
+/* everything that is overdue or due within the next week (loans, money to collect, subscriptions, recurring, installments) */
+function dueItems(){const t=today(),out=[],hide=S.settings.dueHide||{};const dd=d=>Math.round((D(d)-D(t))/864e5);
+  const add=(o)=>{if(o.days>7||hide[o.key])return;out.push(o)};
+  S.loans.forEach(l=>{if(loanRemain(l)<=0||!(+l.months>0))return;const k=Math.min(l.payments.length,+l.months)+1;if(k>+l.months)return;const d=addMonths(l.start,k-1);add({key:'loan:'+l.id+':'+d,id:l.id,scr:'loan',name:l.name,amt:money(emiOf(l),lcur(l)),days:dd(d),kind:'Loan'})});
+  S.lendings.forEach(x=>{if(!x.due||lendRemain(x)<=0)return;add({key:'lend:'+x.id+':'+x.due,id:x.id,scr:'lending',name:x.name,amt:money(lendRemain(x),lcur(x)),days:dd(x.due),kind:'To receive'})});
+  S.subs.forEach(x=>{if(x.active===false||!x.next)return;const lim=Math.max(+x.remindDays||3,0);const n=dd(x.next);if(n>lim)return;add({key:'sub:'+x.id+':'+x.next,id:x.id,scr:'sub',name:x.name,amt:money(x.amount,x.currency),days:n,kind:'Subscription'})});
+  (S.recurring||[]).forEach(r=>{if(!r.next||r.paused)return;add({key:'rec:'+r.id+':'+r.next,id:r.id,scr:'recDetail',name:r.title||cat(r.catId)?.name||'Recurring',amt:money(r.amount,accCur(r.accId)),days:dd(r.next),kind:'Recurring'})});
+  (S.installments||[]).forEach(x=>{if(instRemain(x)<=0)return;const d=instNext(x);if(!d)return;add({key:'inst:'+x.id+':'+d,id:x.id,scr:'inst',name:x.title,amt:B(x.amount),days:dd(d),kind:'Installment'})});
+  return out.sort((a,b)=>a.days-b.days)}
+A.duehide=el=>{S.settings.dueHide=S.settings.dueHide||{};S.settings.dueHide[el.dataset.k]=true;commit()};
 A.startfresh=()=>dialog('Start fresh?','This removes the sample accounts and transactions so you can enter your own. Your settings stay.',[{l:'Cancel'},{l:'Clear sample data',red:true,a:()=>{const st=S.settings;S=baseState();S.settings={...S.settings,...st,sample:false};S.accounts.push({id:uid(),name:'Cash',currency:st.base,type:'wallet',include:true,isDefault:true});commit('Ready for your own data')}}]);
 A.netsheet=()=>{const mk=ym(today());const st=stats(monthStart(mk),monthEnd(mk));openSheet(()=>`<h3>${T('Net Cash Flow')}</h3><span class="small muted">Excludes loan disbursements and wallet transfers.</span><div><div class="kv"><span>${T('Cash In')}</span><b class="green num">${B(st.cin)}</b></div><div class="kv"><span>${T('Cash Out')}</span><b class="red num">${B(st.cout)}</b></div><div class="kv" style="border-top:1px solid var(--line)"><b>Net Cash Flow</b><b class="num ${st.cin-st.cout<0?'red':'green'}">${B(st.cin-st.cout)}</b></div></div>`,{})};
 A.accsheet=(el,ds,e)=>{if(e.target.closest('[data-n="accounts"]')){go('accounts');return}openSheet(()=>`<div class="k">All Accounts Balance</div><div class="big green num">${B(totalBal())}</div><div class="stack s8" style="border-top:1px solid var(--line);padding-top:10px">${wallets().filter(a=>a.include!==false).map(a=>`<button class="between" style="padding:8px 0" data-a="accgo" data-id="${a.id}"><span class="row"><span class="avatar" style="width:30px;height:30px;font-size:calc(12px*var(--fs));background:var(--accent-soft);color:var(--accent)">${esc(a.name[0])}</span>${esc(a.name)}</span><b class="green num">${B(accBalBase(a))}</b></button>`).join('')}</div><div class="between" style="border-top:1px solid var(--line);padding-top:12px"><b>Total</b><b class="green num">${B(totalBal())}</b></div>${cards().filter(c=>c.include!==false).length?`<div class="sec">Credit cards available</div>${cards().filter(c=>c.include!==false).map(a=>`<button class="between" style="padding:8px 0" data-a="accgo" data-id="${a.id}"><span class="row"><span class="avatar" style="width:30px;height:30px;font-size:calc(12px*var(--fs));background:var(--purple-soft);color:var(--purple)">${esc(a.name[0])}</span>${esc(a.name)}</span><b class="num">${money(accBal(a),a.currency)}</b></button>`).join('')}`:''}`,{})};
@@ -1396,18 +1408,39 @@ function trendCard(mk){
   const x=i=>pl+(W-pl-6)*(days.length===1?0:i/(days.length-1)),y=v=>pt+(H-pt-pb)*(1-v/max);
   let g='';for(let i=0;i<=3;i++){const v=max*i/3;g+=`<line x1="${pl}" x2="${W}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${pl-5}" y="${y(v)+3}" text-anchor="end">${compact(v)}</text>`}
   const ticks=isW?days.map((d,i)=>`<text x="${x(i)}" y="${H-4}" text-anchor="middle">${WD[D(d).getDay()]}</text>`).join(''):[0,5,10,15,20,25,n-1].filter((v,i,a)=>a.indexOf(v)===i&&v<n).map(i=>`<text x="${x(i)}" y="${H-4}" text-anchor="middle">${i+1}</text>`).join('');
-  const lines=ser.map(s=>`<polyline fill="none" stroke="${s[2]}" stroke-width="2" stroke-linejoin="round" points="${days.map((d,i)=>x(i).toFixed(1)+','+y((by[d]||{})[s[0]]||0).toFixed(1)).join(' ')}"/>`).join('');
+  const lines=ser.map(s=>`<path fill="none" stroke="${s[2]}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="${smoothPath(days.map((d,i)=>[x(i),y((by[d]||{})[s[0]]||0)]))}"/>`).join('');
   const sel=U.trendDay!=null&&U.trendDay<days.length?U.trendDay:null;
-  let tip='';if(sel!=null){const o=by[days[sel]]||{};const tx=x(sel);tip=`<line x1="${tx}" x2="${tx}" y1="${pt}" y2="${H-pb}" stroke="var(--accent)" stroke-dasharray="3 3"/><circle cx="${tx}" cy="${y(o.co||0)}" r="4" fill="var(--orange)"/>`;}
-  const hits=days.map((d,i)=>`<rect x="${x(i)-(W-pl)/days.length/2}" y="0" width="${(W-pl)/days.length}" height="${H}" fill="transparent" data-a="trendday" data-i="${i}"/>`).join('');
-  const o=sel!=null?(by[days[sel]]||{}):null;
+  const pts=days.map(d=>ser.map(s=>{const v=(by[d]||{})[s[0]]||0;return [+y(v).toFixed(1),B(v)]}));
+  const tdata=esc(JSON.stringify({W,pl,pt,H,pb,n:days.length,lab:days.map(d=>fD(d)),pts}));
+  const cur=`<g class="tr-cur" style="${sel==null?'display:none':''}"><line class="tr-line" x1="${sel!=null?x(sel):0}" x2="${sel!=null?x(sel):0}" y1="${pt}" y2="${H-pb}" stroke="var(--accent)" stroke-width="1.4"/>${ser.map((s,k)=>`<circle class="tr-dot" r="4.2" cx="${sel!=null?x(sel):0}" cy="${sel!=null?pts[sel][k][0]:0}" fill="${s[2]}" stroke="var(--bg)" stroke-width="1.8"/>`).join('')}</g>`;
+  const tip='',hits='',o=null;
   return `<section class="card stack s8"><div class="between"><span class="h2">${T('Spending Trend')}</span><button class="link" data-a="tab" data-n="analytics">View all</button></div>
   <div class="between wrap"><div class="legend">${ser.map(s=>`<span><i style="background:${s[2]}"></i>${s[1]}</span>`).join('')}</div><select class="inp" style="width:auto;padding:6px 10px;font-size:calc(12px*var(--fs))" data-ch="trendmode" id="trendmode" aria-label="Trend period"><option value="monthly" ${!isW?'selected':''}>Monthly</option><option value="weekly" ${isW?'selected':''}>Weekly</option></select></div>
-  <div style="position:relative"><svg viewBox="0 0 ${W} ${H}" width="100%" class="chart" role="img" aria-label="Daily income and spending">${g}${ticks}${lines}${tip}${hits}</svg>
-  ${o?`<div class="card tight tiny" style="position:absolute;top:0;${sel>days.length/2?'left:40px':'right:4px'};background:var(--card2)"><b>${fD(days[sel])}</b><div class="green">Income ${B(o.i||0)}</div><div class="red">Expense ${B(o.e||0)}</div><div style="color:#7BD8A6">Cash In ${B(o.ci||0)}</div><div class="orange">Cash Out ${B(o.co||0)}</div></div>`:''}</div></section>`;
+  <div class="trend-wrap" data-tr="${tdata}"><svg viewBox="0 0 ${W} ${H}" width="100%" class="chart" role="img" aria-label="Daily income and spending — touch and drag to see each day">${g}${ticks}${lines}${cur}</svg>
+  <div class="tr-tip" style="${sel==null?'display:none':''}">${ser.map((s,k)=>`<div class="tr-row"><span style="color:${s[2]}">${s[1]}</span><b style="color:${s[2]}" data-k="${k}">${sel!=null?pts[sel][k][1]:''}</b></div>`).join('')}<div class="tr-date">${sel!=null?fD(days[sel]):''}</div></div></div></section>`;
 }
 A.trendmode=el=>{U.trend=el.value;U.trendDay=null;render()};
 A.trendday=el=>{const i=+el.dataset.i;U.trendDay=U.trendDay===i?null:i;render()};
+/* smooth line through the points (monotone, never overshoots below zero) */
+function smoothPath(P){if(!P.length)return '';if(P.length<3)return 'M'+P.map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join('L');
+  const n=P.length,dx=[],m=[],t=[];for(let i=0;i<n-1;i++){dx[i]=P[i+1][0]-P[i][0];m[i]=(P[i+1][1]-P[i][1])/(dx[i]||1)}
+  t[0]=m[0];t[n-1]=m[n-2];for(let i=1;i<n-1;i++)t[i]=m[i-1]*m[i]<=0?0:(m[i-1]+m[i])/2;
+  for(let i=0;i<n-1;i++){if(m[i]===0){t[i]=0;t[i+1]=0;continue}const a=t[i]/m[i],b=t[i+1]/m[i],h=a*a+b*b;if(h>9){const k=3/Math.sqrt(h);t[i]=k*a*m[i];t[i+1]=k*b*m[i]}}
+  let d='M'+P[0][0].toFixed(1)+','+P[0][1].toFixed(1);for(let i=0;i<n-1;i++){const h=dx[i]/3;d+=`C${(P[i][0]+h).toFixed(1)},${(P[i][1]+t[i]*h).toFixed(1)} ${(P[i+1][0]-h).toFixed(1)},${(P[i+1][1]-t[i+1]*h).toFixed(1)} ${P[i+1][0].toFixed(1)},${P[i+1][1].toFixed(1)}`}return d}
+/* touch & drag on the Spending Trend: a line, dots and a value box follow your finger */
+(function(){let act=null;
+  function show(wrap,clientX){let D;try{D=JSON.parse(wrap.dataset.tr)}catch(e){return}const svg=wrap.querySelector('svg');const r=svg.getBoundingClientRect();if(!r.width)return;
+    const xs=(clientX-r.left)/r.width*D.W;const span=D.W-D.pl-6;let i=D.n===1?0:Math.round((xs-D.pl)/span*(D.n-1));i=Math.max(0,Math.min(D.n-1,i));U.trendDay=i;
+    const X=D.pl+span*(D.n===1?0:i/(D.n-1));const g=wrap.querySelector('.tr-cur');g.style.display='';const ln=g.querySelector('.tr-line');ln.setAttribute('x1',X);ln.setAttribute('x2',X);
+    g.querySelectorAll('.tr-dot').forEach((c,k)=>{c.setAttribute('cx',X);c.setAttribute('cy',D.pts[i][k][0])});
+    const tip=wrap.querySelector('.tr-tip');tip.style.display='';tip.querySelectorAll('b[data-k]').forEach(b=>{b.textContent=D.pts[i][+b.dataset.k][1]});tip.querySelector('.tr-date').textContent=D.lab[i];
+    const px=X/D.W*r.width,tw=tip.offsetWidth||110,wr=wrap.clientWidth;let left=px+12;if(left+tw>wr-2)left=px-tw-12;tip.style.left=Math.max(2,left)+'px'}
+  document.addEventListener('pointerdown',e=>{const w=e.target.closest&&e.target.closest('.trend-wrap');if(!w)return;act=w;show(w,e.clientX)});
+  document.addEventListener('pointermove',e=>{if(act)show(act,e.clientX)},{passive:true});
+  ['pointerup','pointercancel'].forEach(t=>document.addEventListener(t,()=>{act=null}));
+  // keep the box placed correctly after the screen is redrawn
+  new MutationObserver(()=>{const w=document.querySelector('.trend-wrap');if(w&&U.trendDay!=null){const tip=w.querySelector('.tr-tip');if(tip&&tip.style.display!=='none'&&!tip.style.left){try{const D=JSON.parse(w.dataset.tr);const r=w.querySelector('svg').getBoundingClientRect();const X=D.pl+(D.W-D.pl-6)*(D.n===1?0:U.trendDay/(D.n-1));show(w,r.left+X/D.W*r.width)}catch(e){}}}}).observe(document.getElementById('app'),{childList:true,subtree:true});
+})();
 
 /* ---------------- Quick actions ---------------- */
 A.quick=()=>{
@@ -3149,7 +3182,7 @@ function authScreen(view='signin',message='',isError=false){
   }else if(pending){body=`<div style="font-size:34px">⏳</div><h2>Approval pending</h2><p class="auth-sub">Your email is registered, but an administrator must approve your Salli account before you can access your financial data.</p><button class="auth-btn" id="salli-refresh" type="button">Check approval status</button><button class="auth-link" id="salli-signout" type="button">Sign out</button>`}
   else if(rejected){body=`<div style="font-size:34px">ⓘ</div><h2>Account not approved</h2><p class="auth-sub">Your registration has not been approved. Please contact the Salli administrator if you think this is a mistake.</p><button class="auth-btn" id="salli-signout" type="button">Sign out</button>`}
   else if(offline){body=`<div style="font-size:34px">☁️</div><h2>Connection required</h2><p class="auth-sub">Connect to the internet to sign in or register. Once signed in and approved, Salli can keep your saved data available offline on this device.</p><button class="auth-btn" id="salli-retry" type="button">Try again</button>`}
-  app.innerHTML=`<div class="auth-shell"><section class="auth-card"><div class="auth-brand">SALLI</div><p class="auth-sub">Money Manager · Secure personal accounts</p>${body}<p id="salli-auth-message" class="auth-message ${isError?'auth-error':''}">${authSafe(message)}</p><div class="cloud-status">Your financial records are private to your account.</div></section></div>`;
+  app.innerHTML=`<div class="auth-shell"><div class="auth-hero"><div class="auth-logo"><img src="./icons/salli.svg" alt="" width="92" height="92"></div><div class="auth-brand">Salli</div><p class="auth-tag">Money Manager</p></div><section class="auth-card">${body}<p id="salli-auth-message" class="auth-message ${isError?'auth-error':''}">${authSafe(message)}</p><div class="cloud-status">Your financial records are private to your account.</div></section></div>`;
   const form=document.getElementById('salli-auth-form');if(form)form.addEventListener('submit',submitSalliAuth);
   document.getElementById('salli-switch')?.addEventListener('click',()=>authScreen(view==='signup'?'signin':'signup'));
   document.getElementById('salli-forgot')?.addEventListener('click',sendSalliPasswordReset);
@@ -3218,7 +3251,8 @@ async function openSalliWorkspace(){
   if(local&&remote){
     const baseline=meta.lastSyncedRemoteAt;
     if(meta.dirty&&baseline&&Date.parse(remote.updated_at)>Date.parse(baseline)){cloudConflict={remote,local};showCloudConflict();return}
-    if(meta.dirty&&!baseline){S=patchSalliState(local);cloudDirty=true;cloudLastRemoteAt=remote.updated_at}
+    // local has unsynced changes (e.g. made offline) and the cloud has not changed since: keep local and upload it
+    if(meta.dirty){S=patchSalliState(local);cloudDirty=true;cloudLastRemoteAt=remote.updated_at}
     else{S=patchSalliState(remote.data);cloudDirty=false;cloudLastRemoteAt=remote.updated_at}
   }else if(local){S=patchSalliState(local);cloudDirty=!!meta.dirty;cloudLastRemoteAt=remote?.updated_at||null}
   else if(remote){S=patchSalliState(remote.data);cloudDirty=false;cloudLastRemoteAt=remote.updated_at}
@@ -3282,10 +3316,20 @@ async function startSalliCloud(){
     }else if(!navigator.onLine)authScreen('offline');else authScreen('signin');
   }catch(e){console.error(e);if((!navigator.onLine||/fetch|network/i.test(String(e&&e.message)))&&salliOpenOffline())return;authScreen('signin',e.message||'Unable to initialize secure sign-in.',true)}
 }
-window.addEventListener('online',()=>{if(cloudUser&&!cloudClient&&window.supabase?.createClient){try{cloudClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,storage:localStorage}})}catch(e){}}if(cloudUser&&cloudClient){loadSalliProfile(false).catch(e=>console.warn(e));if(cloudDirty)queueCloudSync(300)}if(UNLOCKED)refreshLiveRates().then(r=>{if(r==='updated'&&UNLOCKED)render()})});
+window.addEventListener('online',()=>{if(cloudUser&&!cloudClient&&window.supabase?.createClient){try{cloudClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,storage:localStorage}})}catch(e){}}if(cloudUser&&cloudClient)salliReconnect();if(UNLOCKED)refreshLiveRates().then(r=>{if(r==='updated'&&UNLOCKED)render()})});
 window.addEventListener('offline',()=>{const dot=document.getElementById('salli-sync-indicator');if(dot)dot.textContent='Offline · saved on this device'});
 document.addEventListener('visibilitychange',()=>{if(!document.hidden){if(cloudDirty)queueCloudSync(200);if(UNLOCKED)refreshLiveRates().then(r=>{if(r==='updated'&&UNLOCKED)render()})}});
 
+/* Back online: upload what was saved offline (never replace it with the older cloud copy) */
+async function salliReconnect(){try{
+  let meta={};try{meta=JSON.parse(localStorage.getItem(cloudMetaKey())||'{}')}catch(e){}
+  if(!cloudReady){ // app was opened offline — attach to the cloud without reloading the screen
+    cloudLastRemoteAt=meta.lastSyncedRemoteAt||null;cloudDirty=!!meta.dirty;cloudReady=true;
+    if(!cloudDirty){const {data:remote}=await cloudClient.from('user_data').select('data,updated_at').eq('user_id',cloudUser.id).maybeSingle();
+      if(remote&&(!cloudLastRemoteAt||Date.parse(remote.updated_at)>Date.parse(cloudLastRemoteAt))){S=patchSalliState(remote.data);cloudLastRemoteAt=remote.updated_at;localStorage.setItem(KEY,JSON.stringify(S));localStorage.setItem(cloudMetaKey(),JSON.stringify({dirty:false,lastSyncedRemoteAt:remote.updated_at,savedAt:new Date().toISOString()}));if(UNLOCKED)render()}}}
+  if(cloudDirty)queueCloudSync(300);else{const dot=document.getElementById('salli-sync-indicator');if(dot)dot.textContent='Synced'}
+  cloudClient.auth.getUser().then(({data})=>{if(data&&data.user)return cloudClient.from('profiles').select('user_id,email,role,status,created_at,full_name,phone,country,profile_completed').eq('user_id',data.user.id).maybeSingle().then(({data:prof})=>{if(prof){cloudProfile=prof;localStorage.setItem('salli.profile.'+data.user.id,JSON.stringify(prof));if(prof.status!=='approved'){cloudReady=false;authScreen(prof.status==='rejected'?'rejected':'pending')}}})}).catch(()=>{});
+}catch(e){console.warn('Salli reconnect:',e)}}
 startSalliCloud();
 if(posted&&UNLOCKED)toast(posted+' FD interest payment'+(posted>1?'s':'')+' added');
 
