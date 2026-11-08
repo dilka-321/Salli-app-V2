@@ -108,3 +108,10 @@ cd android && ./gradlew assembleDebug
   The receiving account gets the app-rate amount as the transfer plus the difference as **Exchange Gain** (income) or **Exchange Loss** (expense), so its balance equals the amount your bank actually credited. These appear in the transaction list, reports and bank statements.
 - **Edit transfer** in each transfer's ⋮ menu (accounts, amount, rate, fee, date, note).
 - **Loans: agreed exchange rates** (Add/Edit Loan → "Agreed exchange rates"): one rate per currency for that loan. The loan received amount, every repayment (in any currency or from any account) and the liability shown in your main currency use those rates — not the app rates — for that loan only.
+
+## Version 1.9.4
+- Loan transactions (loan received, repayments, their bank fees) now use that loan's **agreed exchange rate** for the main-currency amount everywhere: dashboard transaction list, daily totals, cash flow, reports. Other transactions keep the app rate.
+- Add/Edit Loan: every agreed rate you enter (e.g. "1 USD = 23 MVR") now shows what the loan is worth in that currency, and it's used when you pay from an account in that currency.
+
+## Version 1.9.5
+- **Premium page transitions**: opening a page slides it in from the right while the previous page sinks back and dims; going back slides the page away to the right and brings the previous one forward; bottom tabs cross-fade with a gentle zoom. Page titles glide in, cards rise in one after another, and the active tab icon pops. Off automatically when the phone's "reduce motion" setting is on.

@@ -83,12 +83,37 @@ body{background:var(--bg);-webkit-font-smoothing:antialiased;-moz-osx-font-smoot
 .navfab:active{transform:scale(.9) rotate(90deg)}
 
 /* ---------- motion: screens, sheets, dialogs, toasts ---------- */
-.screen{animation:pmScreenIn .38s var(--pm-ease) both}
+/* page transitions — direction set by transitions script on #app[data-nav] */
+.screen{animation:pmScreenIn .42s var(--pm-ease) both}
 @keyframes pmScreenIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
-.screen>.pad>*:nth-child(-n+8){animation:pmRise .5s var(--pm-ease) both}
-.screen>.pad>*:nth-child(2){animation-delay:.03s}.screen>.pad>*:nth-child(3){animation-delay:.06s}.screen>.pad>*:nth-child(4){animation-delay:.09s}
-.screen>.pad>*:nth-child(5){animation-delay:.12s}.screen>.pad>*:nth-child(6){animation-delay:.15s}.screen>.pad>*:nth-child(7){animation-delay:.18s}.screen>.pad>*:nth-child(8){animation-delay:.21s}
-@keyframes pmRise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes pmRise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+#app[data-nav="fwd"] .screen{animation:pmPushIn .46s var(--pm-ease) both}
+#app[data-nav="back"] .screen{animation:pmPopIn .42s var(--pm-ease) both}
+#app[data-nav="tab"] .screen{animation:pmTabIn .38s var(--pm-ease) both}
+#app[data-nav="same"] .screen{animation:none}
+@keyframes pmPushIn{from{opacity:0;transform:translate3d(42px,0,0) scale(.985)}60%{opacity:1}to{opacity:1;transform:none}}
+@keyframes pmPopIn{from{opacity:.2;transform:translate3d(-30%,0,0) scale(.97)}to{opacity:1;transform:none}}
+@keyframes pmTabIn{from{opacity:0;transform:scale(.975) translateY(8px)}to{opacity:1;transform:none}}
+/* list items rise in one after another on a new page */
+#app:not([data-nav="same"]):not([data-nav="back"]) .screen>.pad>*:nth-child(-n+8){animation:pmRise .55s var(--pm-ease) both}
+.screen>.pad>*:nth-child(2){animation-delay:.04s}.screen>.pad>*:nth-child(3){animation-delay:.08s}.screen>.pad>*:nth-child(4){animation-delay:.12s}
+.screen>.pad>*:nth-child(5){animation-delay:.16s}.screen>.pad>*:nth-child(6){animation-delay:.2s}.screen>.pad>*:nth-child(7){animation-delay:.24s}.screen>.pad>*:nth-child(8){animation-delay:.28s}
+/* header title glides in with the page */
+#app[data-nav="fwd"] .top h1,#app[data-nav="fwd"] .top .ttl{animation:pmTitleIn .45s var(--pm-ease) both}
+#app[data-nav="back"] .top h1,#app[data-nav="back"] .top .ttl{animation:pmTitleBack .4s var(--pm-ease) both}
+@keyframes pmTitleIn{from{opacity:0;transform:translateX(18px)}to{opacity:1;transform:none}}
+@keyframes pmTitleBack{from{opacity:0;transform:translateX(-14px)}to{opacity:1;transform:none}}
+/* the page you are leaving: pushed back and dimmed (forward) or slid away (back) */
+.pm-ghost{position:fixed;left:0;right:0;z-index:5;pointer-events:none;will-change:transform,opacity;background:var(--bg)}
+.pm-ghost.fwd{animation:pmGhostFwd .46s var(--pm-ease) forwards}
+.pm-ghost.back{z-index:6;animation:pmGhostBack .4s cubic-bezier(.4,0,.2,1) forwards;box-shadow:-18px 0 40px -10px rgba(0,0,0,.5)}
+.pm-ghost.tab{animation:pmGhostTab .3s ease forwards}
+@keyframes pmGhostFwd{to{opacity:0;transform:translate3d(-28%,0,0) scale(.96);filter:brightness(.6)}}
+@keyframes pmGhostBack{to{transform:translate3d(100%,0,0)}}
+@keyframes pmGhostTab{to{opacity:0;transform:scale(1.02)}}
+/* tab icon pop */
+.nb.on svg{animation:pmTabPop .45s var(--pm-spring)}
+@keyframes pmTabPop{0%{transform:scale(.8)}60%{transform:translateY(-2px) scale(1.15)}100%{transform:translateY(-1px) scale(1.08)}}
 .sheet{animation-timing-function:var(--pm-ease)!important;box-shadow:0 -24px 60px -20px rgba(0,0,0,.55)}
 .scrim{-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px)}
 .toast{-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}
@@ -105,7 +130,8 @@ button:focus-visible{outline:2px solid color-mix(in srgb,var(--accent) 70%,trans
 
 /* ---------- respect "reduce motion" ---------- */
 @media (prefers-reduced-motion: reduce){
-  .screen,.screen>.pad>*,.btn.overdue{animation:none!important}
+  .screen,.screen>.pad>*,.btn.overdue,.top h1,.top .ttl,.nb.on svg{animation:none!important}
+  .pm-ghost{display:none!important}
   .card,.btn,.chip,.ib,.navfab,.nb svg{transition:none!important}
 }
 

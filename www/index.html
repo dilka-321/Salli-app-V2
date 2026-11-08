@@ -621,7 +621,7 @@ button,input,select,textarea{font-family:inherit}
 /* =================================================================
    Salli Money Manager — core: helpers, currencies, state, derived data
    ================================================================= */
-const APP_NAME='Salli', APP_VER='1.9.3';
+const APP_NAME='Salli', APP_VER='1.9.5';
 let KEY='salli.mm.v2';
 const KEY_BASE='salli.mm.v2';
 const NATIVE=!!(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform());
@@ -887,7 +887,13 @@ function txTitle(t){
   const k=KIND_INFO[t.kind];return (k?k.title:'Transaction')+(t.who?' - '+t.who:'');
 }
 function txIcon(t){if(t.catId&&cat(t.catId)&&!KIND_INFO[t.kind])return cat(t.catId).icon;const k=KIND_INFO[t.kind];return k?k.icon:(t.catId&&cat(t.catId)?cat(t.catId).icon:'💸')}
-const tBase=t=>conv(t.amount,accCur(t.accId),S.settings.base);
+/* value of a transaction in the main currency — loan transactions use that loan's agreed rate */
+let _ltS=null,_ltK='',_ltM=null;
+function loanOfAnyTx(t){if(!t||!S.loans.length)return null;if(t.kind!=='loan_receive'&&t.kind!=='loan_pay'&&t.kind!=='bank_fee')return null;
+  const k=S.loans.length+':'+S.txns.length+':'+S.loans.map(l=>l.id+(l.payments||[]).length+JSON.stringify(l.rates||0)+l.name).join('|');
+  if(_ltS!==S||_ltK!==k){_ltS=S;_ltK=k;_ltM=new Map();S.loans.forEach(l=>{if(!l.rates||!Object.keys(l.rates).length)return;(l.payments||[]).forEach(p=>{if(p.txId)_ltM.set(p.txId,l);if(p.feeTxId)_ltM.set(p.feeTxId,l)});const rt=S.txns.find(x=>x.kind==='loan_receive'&&((x.link&&x.link.loan===l.id)||(!(x.link&&x.link.loan)&&x.who===l.name)));if(rt)_ltM.set(rt.id,l)})}
+  return _ltM.get(t.id)||null}
+const tBase=t=>{const l=loanOfAnyTx(t);return l?lconv(l,t.amount,accCur(t.accId),S.settings.base):conv(t.amount,accCur(t.accId),S.settings.base)};
 const STAT_INC=['normal','recurring','fx_gain'];
 const STAT_EXP=['normal','recurring','sub','inst','bank_fee','fx_loss'];
 const isInc=t=>t.type==='income'&&STAT_INC.includes(t.kind||'normal');
@@ -1316,7 +1322,7 @@ function emptyState(icon,title,sub,btn){return `<div class="empty">${ic(icon)}${
 function monthChips(sel,act,n=12){return `<div class="chips">${lastMonths(n).map(k=>`<button class="mchip ${k===sel?'on':''}" data-a="${act}" data-k="${k}">${fM(k)}</button>`).join('')}</div>`}
 function txRow(t,o={}){
   const a=acc(t.accId);const c=a?a.currency:S.settings.base;const base=S.settings.base;const inc=t.type==='income';
-  const amtB=conv(t.amount,c,base);
+  const amtB=tBase(t);
   const note=t.note||(t.kind==='lend_give'?'Lending created: '+(t.who||''):t.kind==='lend_receive'?'Payment received for: '+(t.who||''):'');
   return `<button class="tx" data-a="txopen" data-id="${t.id}"><span class="ic ${inc?'':'red'}" style="${o.arrow?'':'font-size:calc(22px*var(--fs))'}">${o.arrow?ic(inc?'arrDL':'arrUR'):txIcon(t)}</span>
    <span class="grow" style="min-width:0"><span class="t ell" style="display:block">${esc(txTitle(t))}</span><span class="s ell" style="display:block">${esc(a?a.name:'Deleted account')}${t.time&&o.time?' · '+fT(t.time):''}</span>${note?`<span class="n ell" style="display:block">${esc(note)}</span>`:''}</span>
@@ -2152,7 +2158,7 @@ function loanForm(id){const l=id?S.loans.find(x=>x.id===id):null;const locked=l&
    ${(()=>{const curs=[...new Set([S.settings.base,...S.accounts.map(a=>a.currency)])].filter(c=>c&&c!==st.currency);if(!curs.length)return '';const tmp={currency:st.currency,rates:loanRatesFromSt(st)};
      return `<div class="card stack s8"><div><b class="small">Agreed exchange rates (optional)</b><div class="tiny muted">The rate agreed for this loan. Payments and the liability use it instead of the app rate — only for this loan.</div></div>
      ${curs.map(c=>{const r=st.rates[c]||{};const inv=r.inv!=null?r.inv:!fxStrong(st.currency,c);const A=inv?c:st.currency,Bc=inv?st.currency:c;return `<div class="fxrow"><span class="small">1</span><button class="chip soft on" data-a="lnrdir" data-c="${c}" aria-label="Swap currencies">${A} ⇄</button><span class="small">=</span><input inputmode="decimal" id="lnr_${c}" placeholder="${rateOf(A,Bc).toFixed(4)}" value="${esc(r.v||'')}" data-in="lnrate" data-c="${c}" data-r="1"><b class="small">${Bc}</b></div>`}).join('')}
-     ${P&&st.currency!==S.settings.base?`<span class="tiny green">≈ ${B(lconv(tmp,P,st.currency,S.settings.base))} at 1 ${st.currency} = ${lconv(tmp,1,st.currency,S.settings.base).toFixed(4)} ${S.settings.base}${tmp.rates[S.settings.base]?' (agreed rate)':''}</span>`:''}</div>`})()}
+     ${P?curs.filter(c=>c===S.settings.base||tmp.rates[c]).map(c=>`<span class="tiny green">≈ ${money(lconv(tmp,P,st.currency,c),c)} at ${fxStrong(st.currency,c)?`1 ${st.currency} = ${lconv(tmp,1,st.currency,c).toFixed(4)} ${c}`:`1 ${c} = ${lconv(tmp,1,c,st.currency).toFixed(4)} ${st.currency}`}${tmp.rates[c]?' (agreed rate)':''}</span>`).join(''):''}</div>`})()}
    ${l?'':`${accChips(st.accId,'lnacc',{title:'Money received into (optional)',noAdd:true})}<span class="tiny muted">Selecting an account records the loan amount as money in${st.accId&&accCur(st.accId)!==st.currency&&P?` (${money(lconv({currency:st.currency,rates:loanRatesFromSt(st)},P,st.currency,accCur(st.accId)),accCur(st.accId))})`:''}.</span>`}
    ${st.err?`<span class="err">${st.err}</span>`:''}<div class="btns"><button class="btn out" data-a="close">Cancel</button><button class="btn" data-a="lnsave">Save</button></div>`},
    {id,type:l?l.type:'bank',name:l?l.name:'',lender:l?l.lender:'',currency:l?lcur(l):S.settings.base,principal:l?String(l.principal):'',rate:l?String(l.rate||''):'',months:l?String(+l.months||''):'12',start:l?l.start:addMonths(today(),1),accId:null,rates:l&&l.rates?Object.fromEntries(Object.entries(l.rates).map(([c,v])=>{const inv=(l.rateDir||{})[c]??!fxStrong(lcur(l),c);return [c,{inv,v:String(+(inv?1/v:v).toFixed(6))}]})):{}},{full:true});
@@ -3378,6 +3384,33 @@ try{const AppP=window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plug
     dialog('Exit App','Do you really want to exit the app?',[{l:'Cancel'},{l:'Exit',primary:true,a:()=>AppP.exitApp()}])})}catch(e){}
 
 
+</script>
+
+<script>
+/* Premium page transitions: the page you leave glides away while the new one slides in.
+   Forward = slide from the right, Back = slide back from the left, bottom tabs = soft cross-fade. */
+(function(){
+  if(typeof render!=='function')return;
+  const reduce=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)');
+  const _render=render;let prevDepth=NAV.length,prevScr=null;
+  window.render=render=function(scrollTop){
+    const app=document.getElementById('app');const before=app.dataset.scr;const old=app.querySelector(':scope > .screen');
+    const depth=NAV.length;const c=cur();const next=c&&c.n;
+    let dir='same';
+    if(UNLOCKED&&before&&next&&before!==next){dir=depth>prevDepth?'fwd':depth<prevDepth?'back':(TABS.includes(next)&&TABS.includes(before)?'tab':'fwd')}
+    else if(UNLOCKED&&before===next&&depth!==prevDepth)dir=depth>prevDepth?'fwd':'back';
+    let ghost=null;
+    if(dir!=='same'&&old&&!(reduce&&reduce.matches)&&!DRAWER){
+      try{const r=old.getBoundingClientRect();ghost=old.cloneNode(true);ghost.removeAttribute('id');ghost.querySelectorAll('[id]').forEach(e=>e.removeAttribute('id'));
+        ghost.classList.add('pm-ghost',dir);ghost.style.top=r.top+'px';ghost.style.height=Math.max(0,innerHeight-Math.max(0,r.top))+'px';ghost.style.top=Math.max(0,r.top)+'px';ghost.style.marginTop=Math.min(0,r.top)+'px';ghost.style.overflow='hidden';ghost.setAttribute('aria-hidden','true');ghost.inert=true}catch(e){ghost=null}}
+    app.dataset.nav=dir;
+    _render(scrollTop);
+    prevDepth=NAV.length;prevScr=cur()&&cur().n;
+    if(ghost){document.body.appendChild(ghost);const kill=()=>ghost&&ghost.remove();ghost.addEventListener('animationend',kill,{once:true});setTimeout(kill,700)}
+    // after the entrance, later redraws of the same page don't animate again
+    if(dir!=='same'){clearTimeout(window.__pmNavT);window.__pmNavT=setTimeout(()=>{if(app.dataset.nav===dir)app.dataset.nav='same'},650)}
+  };
+})();
 </script>
 </body>
 </html>
